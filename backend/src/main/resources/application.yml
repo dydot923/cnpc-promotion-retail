@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: promotion-retail-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cnpc_promotion}
+    username: ${DB_USERNAME:cnpc}
+    password: ${DB_PASSWORD:cnpc}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: ${FLYWAY_ENABLED:false}
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 80MB
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+

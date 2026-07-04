@@ -1,0 +1,22 @@
+.codex-spreadsheet-work/
+
+# Java / Maven
+backend/target/
+*.class
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Local environment and IDE files
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+docs/.haolo-artifacts.json
+
+# Logs and OS metadata
+*.log
+Thumbs.db
+.DS_Store

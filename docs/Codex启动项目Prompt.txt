@@ -1,0 +1,278 @@
+请你作为本项目的主开发 Agent，开始建设“加油站促销智能零售系统”。
+
+## 0. 重要目录约定
+
+当前项目仓库中，原始 Excel 数据文件已经放在 `data/` 目录下。请优先读取并识别：
+
+```text
+data/活动看板.xlsx
+data/价格.xlsx
+data/库存.xlsx
+```
+
+这些 Excel 是本项目最重要的真实业务数据来源：
+
+- `活动看板.xlsx`：促销活动、加油换购、非油促销、会员权益、9.9 专区、券适用范围等；
+- `价格.xlsx`：商品编码、商品名称、商品条码、执行价；
+- `库存.xlsx`：商品编码、商品名称、商品条码、本站库存数量。
+
+不要假设 Excel 在其他目录。如果文件名略有差异，请先在 `data/` 目录下查找相近文件，并向我说明你识别到的文件。
+
+## 1. 开发前必须阅读的文档
+
+在开始写代码前，必须先阅读并遵守项目目录中的以下文档：
+
+```text
+docs/项目需求与架构分析.md
+docs/项目架构优化_促销智能计算优先实施方案.md
+docs/技术选型建议_Java后端方案.md
+docs/Codex工程约束_防止屎山代码.md
+docs/agents/Planner.md
+docs/agents/Frontend.md
+docs/agents/Backend.md
+docs/agents/Reviewer.md
+```
+
+如果这些文件名在当前项目中不同，请先查找对应文档，不要跳过阅读。
+
+## 2. 项目技术方向
+
+后端：
+
+```text
+Java 21
+Spring Boot 3.x
+PostgreSQL
+MyBatis Plus，优先
+Flyway
+EasyExcel
+Redis，可选
+Spring Security + JWT
+Springdoc OpenAPI
+JUnit 5 + AssertJ + Mockito + Testcontainers
+```
+
+前端：
+
+```text
+React 18
+TypeScript
+Vite
+Ant Design
+TanStack Query
+Zustand
+```
+
+## 3. 最高优先级
+
+本项目一期必须优先完成 **促销智能计算引擎**。
+
+不要先堆页面，不要先做海报，不要先做报表。促销计算引擎必须是系统的核心内核。
+
+一期核心目标：
+
+```text
+把 data/ 下的真实 Excel 数据导入并结构化
+基于商品、价格、库存、促销规则建立标准模型
+实现 ruleengine 促销智能计算引擎
+实现 checkout calculate 结算计算接口
+用真实促销样例写测试
+```
+
+## 4. 必须遵守的架构约束
+
+1. 促销逻辑只能集中在后端 `ruleengine` 模块。
+2. 前端不得写促销判断逻辑。
+3. Controller 不得写促销判断逻辑。
+4. Service 只能做流程编排，不能堆大段促销 `if/else`。
+5. 金额计算必须使用 `BigDecimal`，禁止使用 `double` 或 `float`。
+6. 商品编码和条码必须使用 `String`。
+7. 规则必须可解释、可测试、可版本追溯。
+8. 不可用促销也要返回不可用原因，不能静默丢弃。
+9. 原价结算必须始终可用。
+10. Excel 导入必须生成异常报告，不能静默丢弃异常行。
+11. AI 海报不能作为价格和促销文案的真相来源。
+12. `data/` 目录下的 Excel 只作为原始数据源，导入后应形成结构化规则、商品、价格和库存数据。
+
+## 5. 请按以下步骤推进
+
+### 第一步：读取文档和数据目录
+
+请先做：
+
+1. 阅读 `docs/` 下的项目文档；
+2. 检查 `data/` 目录；
+3. 识别 `活动看板.xlsx`、`价格.xlsx`、`库存.xlsx`；
+4. 输出你识别到的 Excel 工作表、字段和初步数据结构；
+5. 总结你理解到的系统目标、技术栈、核心约束。
+
+### 第二步：检查或创建项目骨架
+
+如果还没有项目骨架，请创建前后端分离结构：
+
+```text
+backend/
+frontend/
+docs/
+data/
+```
+
+不要移动或破坏 `data/` 下的原始 Excel 文件。
+
+### 第三步：搭建 Java 后端基础结构
+
+推荐后端模块：
+
+```text
+common
+auth
+product
+price
+inventory
+promotion
+ruleengine
+checkout
+replenishment
+poster
+importcenter
+audit
+```
+
+其中 `ruleengine` 是最高优先级模块。
+
+### 第四步：优先实现 ruleengine 骨架
+
+至少定义：
+
+```text
+OrderContext
+FuelContext
+CustomerContext
+CartItem
+PromotionRule
+PromotionCandidate
+BlockedPromotion
+CalculationResult
+PromotionEngine
+ConditionMatcher
+BenefitCalculator
+ConflictResolver
+CandidateRanker
+ExplanationBuilder
+```
+
+不要先写页面。
+
+### 第五步：支持一期核心促销类型
+
+先支持：
+
+1. `fixed_price`：固定促销价，例如 9.9 元专区；
+2. `percentage_discount`：折扣，例如逢 9 全场 9 折；
+3. `amount_off`：满减；
+4. `exchange_purchase`：加油换购；
+5. `gift_item`：买赠；
+6. `gift_coupon`：赠券；
+7. `bundle_price`：组合包价。
+
+### 第六步：基于 data/ 真实 Excel 做导入设计
+
+请设计并实现导入能力：
+
+```text
+POST /api/import/prices
+POST /api/import/inventory
+POST /api/import/promotions
+```
+
+导入要求：
+
+- 使用 EasyExcel；
+- 商品编码按 String 读取；
+- 商品条码按 String 读取；
+- 金额按 BigDecimal 读取；
+- 合并单元格要处理；
+- 空值继承要明确；
+- 不可解析的自然语言规则进入“待确认”状态；
+- 导入结果必须返回新增、更新、跳过、异常数量；
+- 异常行必须可导出或可查看；
+- 不得静默覆盖人工修正规则。
+
+### 第七步：为促销引擎写单元测试
+
+测试必须覆盖：
+
+- 9.9 元固定价；
+- 逢 9 全场 9 折；
+- 香烟、化肥排除；
+- 汽油满额换购；
+- 柴油满额换购；
+- 买赠；
+- 赠券；
+- 组合包；
+- 库存不足；
+- 油品金额不足；
+- 多促销互斥；
+- 原价兜底；
+- 不可用原因返回。
+
+### 第八步：实现结算计算接口
+
+```http
+POST /api/checkout/calculate
+POST /api/checkout/confirm
+```
+
+`/api/checkout/calculate` 必须返回：
+
+- 原价金额；
+- 应付金额；
+- 优惠金额；
+- 推荐促销方案；
+- 可选促销方案；
+- 不可用促销及原因；
+- 解释文本；
+- 规则版本；
+- 库存警告；
+- 原价兜底方案。
+
+### 第九步：再做前端、库存预警和 AI 海报
+
+顺序必须是：
+
+```text
+ruleengine
+checkout API
+Excel import
+checkout frontend
+inventory warning
+replenishment export
+AI poster
+reports
+```
+
+不要反过来。
+
+## 6. 开发方式要求
+
+1. 每完成一个阶段，请先运行测试。
+2. 每新增一种促销规则，必须新增测试。
+3. 不要为了演示写临时代码。
+4. 不要生成万能 `Util`、超大 `Service`、超大 Controller。
+5. 如果发现需求不清楚，先在文档或代码注释中标记假设，不要硬编码。
+6. 如果需要取舍，优先保证促销计算引擎正确、可解释、可测试。
+7. 不要移动、删除或修改 `data/` 下的原始 Excel 文件，除非我明确要求。
+
+## 7. 现在请你先做这些事情
+
+请立即开始：
+
+1. 阅读项目文档；
+2. 检查 `data/` 目录；
+3. 识别三份 Excel 的工作表、字段、样例数据；
+4. 总结系统目标、技术栈、核心约束；
+5. 检查仓库结构；
+6. 给出第一阶段实施计划；
+7. 然后开始创建后端基础工程和 `ruleengine` 模块骨架。
+
+再次强调：不要跳过计划直接写页面。项目第一阶段目标是把促销智能计算引擎打牢，并且它必须基于 `data/` 目录下的真实 Excel 数据做导入和规则建模。
