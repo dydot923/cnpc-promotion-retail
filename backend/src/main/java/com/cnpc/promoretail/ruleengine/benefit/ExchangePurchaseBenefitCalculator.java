@@ -23,11 +23,20 @@ public class ExchangePurchaseBenefitCalculator extends AbstractBenefitCalculator
         }
 
         BigDecimal exchangePrice = money(rule.benefit().exchangePrice());
-        BigDecimal discount = items.stream()
-                .map(item -> item.unitPrice().subtract(exchangePrice)
-                        .max(BigDecimal.ZERO)
-                        .multiply(BigDecimal.valueOf(item.quantity())))
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        int remainingExchangeQuantity = rule.benefit().applicableExchangeQuantity(
+                items.stream().mapToInt(CartItem::quantity).sum());
+        BigDecimal discount = BigDecimal.ZERO;
+        for (CartItem item : items) {
+            if (remainingExchangeQuantity <= 0) {
+                break;
+            }
+            int appliedQuantity = Math.min(item.quantity(), remainingExchangeQuantity);
+            BigDecimal lineDiscount = item.unitPrice().subtract(exchangePrice)
+                    .max(BigDecimal.ZERO)
+                    .multiply(BigDecimal.valueOf(appliedQuantity));
+            discount = discount.add(lineDiscount);
+            remainingExchangeQuantity -= appliedQuantity;
+        }
 
         if (discount.compareTo(BigDecimal.ZERO) <= 0) {
             return BenefitCalculation.blocked(List.of("换购价未低于当前执行价。"));

@@ -3,8 +3,8 @@ package com.cnpc.promoretail.ruleengine.condition;
 import com.cnpc.promoretail.ruleengine.context.CartItem;
 import com.cnpc.promoretail.ruleengine.context.OrderContext;
 import com.cnpc.promoretail.ruleengine.model.CartTotals;
+import com.cnpc.promoretail.ruleengine.model.PromotionCondition;
 import com.cnpc.promoretail.ruleengine.model.PromotionRule;
-import com.cnpc.promoretail.ruleengine.model.RuleCondition;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +13,7 @@ public class DefaultConditionMatcher implements ConditionMatcher {
 
     @Override
     public ConditionMatchResult match(OrderContext context, PromotionRule rule) {
-        RuleCondition condition = rule.condition();
+        PromotionCondition condition = rule.condition();
         List<String> reasons = new ArrayList<>();
 
         if (context.businessDate() != null) {
@@ -55,7 +55,7 @@ public class DefaultConditionMatcher implements ConditionMatcher {
 
         if (!condition.productCodes().isEmpty() && context.cartItems().stream()
                 .noneMatch(item -> item.matchesProductScope(condition.productCodes()))) {
-            reasons.add("当前购物车没有活动适用商品。");
+            reasons.add("商品不在活动范围内。");
         }
 
         boolean allEligibleItemsExcluded = context.cartItems().stream()

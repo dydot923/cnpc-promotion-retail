@@ -8,8 +8,8 @@ public record PromotionRule(
         String exclusiveGroup,
         boolean stackable,
         PromotionRuleStatus status,
-        RuleCondition condition,
-        RuleBenefit benefit,
+        PromotionCondition condition,
+        PromotionBenefit benefit,
         String version
 ) {
 
@@ -24,7 +24,7 @@ public record PromotionRule(
             throw new IllegalArgumentException("ruleType is required");
         }
         status = status == null ? PromotionRuleStatus.PENDING_CONFIRMATION : status;
-        condition = condition == null ? RuleCondition.empty() : condition;
+        condition = condition == null ? PromotionCondition.empty() : condition;
         if (benefit == null) {
             throw new IllegalArgumentException("benefit is required");
         }
@@ -32,7 +32,16 @@ public record PromotionRule(
     }
 
     public boolean active() {
-        return status == PromotionRuleStatus.ACTIVE;
+        return status == PromotionRuleStatus.CONFIRMED;
+    }
+
+    public PromotionRule withStatus(PromotionRuleStatus newStatus) {
+        return new PromotionRule(ruleId, activityName, ruleType, priority, exclusiveGroup, stackable,
+                newStatus, condition, benefit, version);
+    }
+
+    public PromotionRule withVersion(String newVersion) {
+        return new PromotionRule(ruleId, activityName, ruleType, priority, exclusiveGroup, stackable,
+                status, condition, benefit, newVersion);
     }
 }
-

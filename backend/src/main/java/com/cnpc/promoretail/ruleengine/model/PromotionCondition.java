@@ -5,7 +5,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Set;
 
-public record RuleCondition(
+public record PromotionCondition(
         Set<String> productCodes,
         Set<String> excludedCategories,
         Set<FuelType> fuelTypes,
@@ -19,7 +19,7 @@ public record RuleCondition(
         BigDecimal minInventoryQuantity
 ) {
 
-    public RuleCondition {
+    public PromotionCondition {
         productCodes = productCodes == null ? Set.of() : Set.copyOf(productCodes);
         excludedCategories = excludedCategories == null ? Set.of() : Set.copyOf(excludedCategories);
         fuelTypes = fuelTypes == null ? Set.of() : Set.copyOf(fuelTypes);
@@ -30,8 +30,8 @@ public record RuleCondition(
         minInventoryQuantity = minInventoryQuantity == null ? BigDecimal.ZERO : minInventoryQuantity;
     }
 
-    public static RuleCondition empty() {
-        return new RuleCondition(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+    public static PromotionCondition empty() {
+        return new PromotionCondition(Set.of(), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
                 BigDecimal.ZERO, BigDecimal.ZERO, false, BigDecimal.ZERO);
     }
 }

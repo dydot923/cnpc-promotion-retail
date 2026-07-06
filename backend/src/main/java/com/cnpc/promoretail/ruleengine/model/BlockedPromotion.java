@@ -6,7 +6,7 @@ public record BlockedPromotion(
         String ruleId,
         String title,
         PromotionRuleType ruleType,
-        List<String> reasons,
+        List<BlockedReason> reasons,
         String ruleVersion
 ) {
 
@@ -14,4 +14,3 @@ public record BlockedPromotion(
         reasons = reasons == null ? List.of() : List.copyOf(reasons);
     }
 }
-

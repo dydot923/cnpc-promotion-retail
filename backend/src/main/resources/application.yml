@@ -1,11 +1,10 @@
 spring:
   application:
     name: promotion-retail-backend
-  datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/cnpc_promotion}
-    username: ${DB_USERNAME:cnpc}
-    password: ${DB_PASSWORD:cnpc}
-    driver-class-name: org.postgresql.Driver
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
   flyway:
     enabled: ${FLYWAY_ENABLED:false}
     locations: classpath:db/migration
@@ -31,3 +30,18 @@ management:
       exposure:
         include: health,info
 
+---
+spring:
+  config:
+    activate:
+      on-profile: "dev-db | postgres"
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/cnpc_promotion}
+    username: ${DB_USERNAME:cnpc}
+    password: ${DB_PASSWORD:cnpc}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration

@@ -8,13 +8,16 @@ import com.cnpc.promoretail.ruleengine.conflict.ConflictResolver;
 import com.cnpc.promoretail.ruleengine.context.OrderContext;
 import com.cnpc.promoretail.ruleengine.explanation.ExplanationBuilder;
 import com.cnpc.promoretail.ruleengine.model.BlockedPromotion;
+import com.cnpc.promoretail.ruleengine.model.BlockedReason;
 import com.cnpc.promoretail.ruleengine.model.CalculationResult;
 import com.cnpc.promoretail.ruleengine.model.CartTotals;
+import com.cnpc.promoretail.ruleengine.model.MoneySummary;
 import com.cnpc.promoretail.ruleengine.model.PromotionCandidate;
 import com.cnpc.promoretail.ruleengine.model.PromotionRule;
 import com.cnpc.promoretail.ruleengine.ranking.CandidateRanker;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class DefaultPromotionEngine implements PromotionEngine {
 
@@ -75,23 +78,34 @@ public class DefaultPromotionEngine implements PromotionEngine {
             }
         }
 
-        List<PromotionCandidate> resolvedCandidates = conflictResolver.resolve(candidates);
+        List<PromotionCandidate> resolvedCandidates = new ArrayList<>();
+        resolvedCandidates.add(fallback);
+        resolvedCandidates.addAll(conflictResolver.resolve(candidates));
         PromotionCandidate recommended = candidateRanker.recommend(resolvedCandidates).orElse(fallback);
+        List<String> ruleVersionIds = resolvedCandidates.stream()
+                .map(PromotionCandidate::ruleVersion)
+                .filter(Objects::nonNull)
+                .filter(version -> !"original".equals(version))
+                .distinct()
+                .toList();
         return new CalculationResult(
                 totals.originalAmount(),
                 recommended.payableAmount(),
                 recommended.discountAmount(),
+                MoneySummary.of(totals.originalAmount(), recommended.payableAmount(), recommended.discountAmount()),
                 recommended.candidateId(),
                 resolvedCandidates,
                 blockedPromotions,
                 explanationBuilder.summarize(recommended, blockedPromotions),
                 recommended.ruleVersion(),
+                ruleVersionIds,
                 List.of(),
                 fallback
         );
     }
 
     private BlockedPromotion blocked(PromotionRule rule, List<String> reasons) {
-        return new BlockedPromotion(rule.ruleId(), rule.activityName(), rule.ruleType(), reasons, rule.version());
+        return new BlockedPromotion(rule.ruleId(), rule.activityName(), rule.ruleType(),
+                reasons.stream().map(BlockedReason::of).toList(), rule.version());
     }
 }
