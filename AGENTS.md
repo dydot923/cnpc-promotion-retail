@@ -10,6 +10,7 @@
 - Inspect `git diff --cached` before committing.
 - Commit the current task with a clear Conventional Commits-style message, for example `feat: add checkout confirmation flow` or `fix: handle import validation errors`.
 - Report the commit hash in the final response.
+- When the user asks to publish or push work, push commits to `origin/main`, which points to `https://github.com/dydot923/cnpc-promotion-retail.git`.
 
 ## Verification Commands
 
