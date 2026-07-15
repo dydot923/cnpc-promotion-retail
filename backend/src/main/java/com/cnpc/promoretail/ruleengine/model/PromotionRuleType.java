@@ -8,6 +8,8 @@ public enum PromotionRuleType {
     EXCHANGE_PURCHASE,
     GIFT_ITEM,
     GIFT_COUPON,
-    BUNDLE_PRICE
+    BUNDLE_PRICE,
+    COUPON_REDEEM,
+    FUEL_VOLUME_DISCOUNT,
+    COMPOSITE
 }
-

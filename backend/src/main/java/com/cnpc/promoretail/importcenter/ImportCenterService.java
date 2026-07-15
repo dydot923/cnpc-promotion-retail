@@ -1,6 +1,7 @@
 package com.cnpc.promoretail.importcenter;
 
 import com.cnpc.promoretail.importcenter.excel.EasyExcelWorkbookReader;
+import com.cnpc.promoretail.importcenter.model.CouponImportRecord;
 import com.cnpc.promoretail.importcenter.model.FixedPricePromotionImportRow;
 import com.cnpc.promoretail.importcenter.model.ImportBatch;
 import com.cnpc.promoretail.importcenter.model.ImportErrorCode;
@@ -13,6 +14,12 @@ import com.cnpc.promoretail.importcenter.model.InventoryImportRow;
 import com.cnpc.promoretail.importcenter.model.PriceImportRow;
 import com.cnpc.promoretail.importcenter.model.RawExcelRow;
 import com.cnpc.promoretail.importcenter.repository.ImportRecordRepository;
+import com.cnpc.promoretail.product.repository.InMemoryProductCatalogRepository;
+import com.cnpc.promoretail.product.repository.ProductCatalogRepository;
+import com.cnpc.promoretail.promotion.coupon.CouponRepository;
+import com.cnpc.promoretail.promotion.coupon.CouponTemplateRepository;
+import com.cnpc.promoretail.promotion.coupon.InMemoryCouponRepository;
+import com.cnpc.promoretail.promotion.coupon.InMemoryCouponTemplateRepository;
 import com.cnpc.promoretail.promotion.model.ImportedPromotionRule;
 import com.cnpc.promoretail.promotion.service.PromotionRuleGovernanceService;
 import com.cnpc.promoretail.ruleengine.model.PromotionBenefit;
@@ -25,26 +32,52 @@ import java.math.RoundingMode;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ImportCenterService {
 
     public static final String NINE_POINT_NINE_SHEET_NAME = "参考2-9.9元商品专区";
+    public static final String MEMBER_BENEFIT_SHEET_NAME = "会员权益包";
+    public static final String COUPON_SCOPE_SHEET_NAME = "参考3-会员生日&省区特色专用券范围";
 
     private final EasyExcelWorkbookReader workbookReader;
+    private final CouponExcelImportMapper couponExcelImportMapper;
     private final ImportRecordRepository importRecordRepository;
     private final PromotionRuleGovernanceService promotionRuleGovernanceService;
+    private final ProductCatalogRepository productCatalogRepository;
+    private final CouponTemplateRepository couponTemplateRepository;
+    private final CouponRepository couponRepository;
 
     public ImportCenterService(
             EasyExcelWorkbookReader workbookReader,
             ImportRecordRepository importRecordRepository,
             PromotionRuleGovernanceService promotionRuleGovernanceService
     ) {
+        this(workbookReader, importRecordRepository, promotionRuleGovernanceService,
+                new InMemoryProductCatalogRepository(), new InMemoryCouponTemplateRepository(),
+                new InMemoryCouponRepository());
+    }
+
+    @Autowired
+    public ImportCenterService(
+            EasyExcelWorkbookReader workbookReader,
+            ImportRecordRepository importRecordRepository,
+            PromotionRuleGovernanceService promotionRuleGovernanceService,
+            ProductCatalogRepository productCatalogRepository,
+            CouponTemplateRepository couponTemplateRepository,
+            CouponRepository couponRepository
+    ) {
         this.workbookReader = workbookReader;
+        this.couponExcelImportMapper = new CouponExcelImportMapper(workbookReader);
         this.importRecordRepository = importRecordRepository;
         this.promotionRuleGovernanceService = promotionRuleGovernanceService;
+        this.productCatalogRepository = productCatalogRepository;
+        this.couponTemplateRepository = couponTemplateRepository;
+        this.couponRepository = couponRepository;
     }
 
     public ImportResult<PriceImportRow> importPrices(Path file) {
@@ -77,6 +110,7 @@ public class ImportCenterService {
             }
         }
 
+        productCatalogRepository.savePriceRows(version, records);
         return persist(result(version, ImportType.PRICE, file, records, skipped, errors, List.of()));
     }
 
@@ -106,6 +140,7 @@ public class ImportCenterService {
             }
         }
 
+        productCatalogRepository.saveInventoryRows(version, records);
         return persist(result(version, ImportType.INVENTORY, file, records, skipped, errors, List.of()));
     }
 
@@ -161,6 +196,58 @@ public class ImportCenterService {
                 result(version, ImportType.PROMOTION, file, records, skipped, errors, warnings));
         result.records().forEach(rule -> promotionRuleGovernanceService.createDraft(rule, "importcenter"));
         return result;
+    }
+
+    public ImportResult<CouponImportRecord> importCoupons(Path file) {
+        ImportVersion version = ImportVersion.newVersion(ImportType.COUPON);
+        List<ImportErrorRow> errors = new ArrayList<>();
+        List<RawExcelRow> rows;
+        try {
+            rows = workbookReader.readSheet(file, MEMBER_BENEFIT_SHEET_NAME, 3);
+        } catch (RuntimeException exception) {
+            errors.add(blocker(version, MEMBER_BENEFIT_SHEET_NAME, "工作表不存在或读取失败: " + exception.getMessage()));
+            return persist(result(version, ImportType.COUPON, file, List.of(), 0, errors, List.of()));
+        }
+
+        Map<String, List<String>> scopedProductCodes =
+                couponExcelImportMapper.readCouponScopeProductCodes(file, version, errors);
+        List<CouponImportRecord> records = new ArrayList<>();
+        int skipped = 0;
+        String inheritedSalesChannel = "";
+        String inheritedPackageType = "";
+
+        for (RawExcelRow row : rows) {
+            if (!blank(row.cell(0))) {
+                inheritedSalesChannel = row.cell(0);
+            }
+            if (!blank(row.cell(2))) {
+                inheritedPackageType = row.cell(2);
+            }
+            try {
+                var mapping = couponExcelImportMapper.mapMemberBenefitRow(row, version, inheritedSalesChannel,
+                        inheritedPackageType, scopedProductCodes);
+                if (mapping.isEmpty()) {
+                    skipped++;
+                    continue;
+                }
+                couponTemplateRepository.save(mapping.get().couponTemplate());
+                mapping.get().couponInstances().forEach(couponRepository::save);
+                records.add(new CouponImportRecord(version, row.sheetName(), row.rowNumber(),
+                        mapping.get().couponTemplate(), mapping.get().couponInstances(), mapping.get().mappingNote()));
+            } catch (CouponExcelImportMapper.CouponImportRowException exception) {
+                if (exception.severity() == ImportErrorSeverity.WARNING) {
+                    skipped++;
+                }
+                errors.add(exception.toError(version, row));
+            }
+        }
+
+        List<String> warnings = List.of(
+                "已从“会员权益包”导入可解析面额的券模板；无法可靠解析面额的折扣券/自然语言券进入 warning，不静默丢弃。",
+                "已从“参考3-会员生日&省区特色专用券范围”聚合可核销商品编码，并回填到匹配券模板的 applicableProductCodes。",
+                "活动看板源数据通常只描述券模板和发放数量；只有显式出现券号/券实例ID/couponId 的行才生成 coupon 实例。"
+        );
+        return persist(result(version, ImportType.COUPON, file, records, skipped, errors, warnings));
     }
 
     private <T> ImportResult<T> persist(ImportResult<T> result) {
@@ -308,11 +395,21 @@ public class ImportCenterService {
         private final ImportErrorSeverity severity;
 
         private ImportRowException(String columnName, String rawValue, ImportErrorCode errorCode, String message) {
+            this(columnName, rawValue, errorCode, message, ImportErrorSeverity.ERROR);
+        }
+
+        private ImportRowException(
+                String columnName,
+                String rawValue,
+                ImportErrorCode errorCode,
+                String message,
+                ImportErrorSeverity severity
+        ) {
             super(message);
             this.columnName = columnName;
             this.rawValue = rawValue == null ? "" : rawValue;
             this.errorCode = errorCode;
-            this.severity = ImportErrorSeverity.ERROR;
+            this.severity = severity == null ? ImportErrorSeverity.ERROR : severity;
         }
 
         private String columnName() {

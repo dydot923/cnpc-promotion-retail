@@ -1,6 +1,7 @@
 package com.cnpc.promoretail.importcenter;
 
 import com.cnpc.promoretail.common.api.ApiResponse;
+import com.cnpc.promoretail.importcenter.model.CouponImportRecord;
 import com.cnpc.promoretail.importcenter.model.ImportResult;
 import com.cnpc.promoretail.importcenter.model.InventoryImportRow;
 import com.cnpc.promoretail.importcenter.model.PriceImportRow;
@@ -31,17 +32,36 @@ public class ImportCenterController {
 
     @PostMapping(value = "/prices", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ImportResult<PriceImportRow>> importPrices(@RequestParam("file") MultipartFile file) {
+        validateFile(file);
         return ApiResponse.ok(withTemporaryFile(file, importCenterService::importPrices));
     }
 
     @PostMapping(value = "/inventory", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ImportResult<InventoryImportRow>> importInventory(@RequestParam("file") MultipartFile file) {
+        validateFile(file);
         return ApiResponse.ok(withTemporaryFile(file, importCenterService::importInventory));
     }
 
     @PostMapping(value = "/promotions", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ImportResult<ImportedPromotionRule>> importPromotions(@RequestParam("file") MultipartFile file) {
+        validateFile(file);
         return ApiResponse.ok(withTemporaryFile(file, importCenterService::importNinePointNineFixedPricePromotions));
+    }
+
+    @PostMapping(value = "/coupons", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<ImportResult<CouponImportRecord>> importCoupons(@RequestParam("file") MultipartFile file) {
+        validateFile(file);
+        return ApiResponse.ok(withTemporaryFile(file, importCenterService::importCoupons));
+    }
+
+    private void validateFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("导入文件不能为空");
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || !originalFilename.endsWith(".xlsx")) {
+            throw new IllegalArgumentException("仅支持 .xlsx 格式的 Excel 文件");
+        }
     }
 
     private <T> T withTemporaryFile(MultipartFile file, FileImporter<T> importer) {

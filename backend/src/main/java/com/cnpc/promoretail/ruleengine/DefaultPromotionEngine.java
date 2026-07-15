@@ -71,9 +71,10 @@ public class DefaultPromotionEngine implements PromotionEngine {
             }
 
             BenefitCalculation benefit = calculator.calculate(context, rule, totals);
-            if (benefit.available()) {
-                candidates.add(benefit.candidate());
-            } else {
+            if (benefit.hasCandidates()) {
+                candidates.addAll(benefit.candidates());
+            }
+            if (!benefit.blockedReasons().isEmpty()) {
                 blockedPromotions.add(blocked(rule, benefit.blockedReasons()));
             }
         }

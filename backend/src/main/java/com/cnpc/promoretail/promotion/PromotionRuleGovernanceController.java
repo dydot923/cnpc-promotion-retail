@@ -4,8 +4,8 @@ import com.cnpc.promoretail.common.api.ApiResponse;
 import com.cnpc.promoretail.promotion.model.PromotionRuleDraft;
 import com.cnpc.promoretail.promotion.model.PromotionRuleVersion;
 import com.cnpc.promoretail.promotion.service.PromotionRuleGovernanceService;
-import com.cnpc.promoretail.ruleengine.model.PromotionRule;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,10 +41,9 @@ public class PromotionRuleGovernanceController {
     @PostMapping("/drafts/{draftId}/revise")
     public ApiResponse<PromotionRuleDraft> reviseDraft(
             @PathVariable String draftId,
-            @Valid @RequestBody RuleRevisionRequest request
+            @Valid @RequestBody PromotionRuleReviseRequest request
     ) {
-        return ApiResponse.ok(governanceService.reviseDraft(
-                draftId, request.rule(), operatorId(request), changeReason(request)));
+        return ApiResponse.ok(governanceService.reviseDraft(draftId, request));
     }
 
     @PostMapping("/rules/{ruleId}/disable")
@@ -55,7 +54,46 @@ public class PromotionRuleGovernanceController {
         return ApiResponse.ok(governanceService.disableRule(ruleId, operatorId(request), changeReason(request)));
     }
 
+    @PostMapping("/rules/batch-confirm")
+    public ApiResponse<List<PromotionRuleVersion>> batchConfirm(@RequestBody BatchRuleActionRequest request) {
+        return ApiResponse.ok(governanceService.batchConfirmRules(
+                request.ruleIds(),
+                operatorId(request),
+                changeReason(request)
+        ));
+    }
+
+    @PostMapping("/rules/batch-revise")
+    public ApiResponse<List<PromotionRuleDraft>> batchRevise(@RequestBody BatchRuleReviseRequest request) {
+        return ApiResponse.ok(governanceService.batchReviseRules(
+                request.revisions(),
+                operatorId(request),
+                changeReason(request)
+        ));
+    }
+
+    @PostMapping("/rules/batch-archive")
+    public ApiResponse<List<PromotionRuleVersion>> batchArchive(@RequestBody BatchRuleActionRequest request) {
+        return ApiResponse.ok(governanceService.batchArchiveRules(
+                request.ruleIds(),
+                operatorId(request),
+                changeReason(request)
+        ));
+    }
+
     private String operatorId(RuleActionRequest request) {
+        return request == null || request.operatorId() == null || request.operatorId().isBlank()
+                ? "system"
+                : request.operatorId();
+    }
+
+    private String operatorId(BatchRuleActionRequest request) {
+        return request == null || request.operatorId() == null || request.operatorId().isBlank()
+                ? "system"
+                : request.operatorId();
+    }
+
+    private String operatorId(BatchRuleReviseRequest request) {
         return request == null || request.operatorId() == null || request.operatorId().isBlank()
                 ? "system"
                 : request.operatorId();
@@ -65,21 +103,22 @@ public class PromotionRuleGovernanceController {
         return request == null || request.changeReason() == null ? "" : request.changeReason();
     }
 
-    private String operatorId(RuleRevisionRequest request) {
-        return request == null || request.operatorId() == null || request.operatorId().isBlank()
-                ? "system"
-                : request.operatorId();
+    private String changeReason(BatchRuleActionRequest request) {
+        return request == null || request.changeReason() == null ? "" : request.changeReason();
     }
 
-    private String changeReason(RuleRevisionRequest request) {
+    private String changeReason(BatchRuleReviseRequest request) {
         return request == null || request.changeReason() == null ? "" : request.changeReason();
     }
 
     public record RuleActionRequest(String operatorId, String changeReason) {
     }
 
-    public record RuleRevisionRequest(
-            PromotionRule rule,
+    public record BatchRuleActionRequest(List<String> ruleIds, String operatorId, String changeReason) {
+    }
+
+    public record BatchRuleReviseRequest(
+            List<PromotionRuleReviseRequest> revisions,
             String operatorId,
             String changeReason
     ) {

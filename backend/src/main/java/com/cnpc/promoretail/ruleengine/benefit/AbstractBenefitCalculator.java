@@ -7,12 +7,15 @@ import com.cnpc.promoretail.ruleengine.model.PromotionRule;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 abstract class AbstractBenefitCalculator implements BenefitCalculator {
 
     protected List<CartItem> eligibleItems(OrderContext context, PromotionRule rule) {
         return context.cartItems().stream()
                 .filter(item -> item.matchesProductScope(rule.condition().productCodes()))
+                .filter(item -> item.includedByCategory(rule.condition().includedCategories()))
                 .filter(item -> !item.excludedByCategory(rule.condition().excludedCategories()))
                 .toList();
     }
@@ -44,12 +47,24 @@ abstract class AbstractBenefitCalculator implements BenefitCalculator {
                 rule.version(),
                 rule.exclusiveGroup(),
                 rule.stackable(),
-                rule.priority()
+                rule.priority(),
+                consumedProductCodes(rule, List.of()),
+                Set.of(),
+                List.of(),
+                rule.benefit().pointsMultiplier()
         );
+    }
+
+    protected Set<String> consumedProductCodes(PromotionRule rule, List<CartItem> items) {
+        if (items != null && !items.isEmpty()) {
+            return items.stream()
+                    .map(CartItem::productCode)
+                    .collect(Collectors.toUnmodifiableSet());
+        }
+        return rule.condition().productCodes();
     }
 
     protected BigDecimal money(BigDecimal value) {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
     }
 }
-

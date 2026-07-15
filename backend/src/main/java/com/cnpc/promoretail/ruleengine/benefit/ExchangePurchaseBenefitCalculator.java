@@ -23,19 +23,36 @@ public class ExchangePurchaseBenefitCalculator extends AbstractBenefitCalculator
         }
 
         BigDecimal exchangePrice = money(rule.benefit().exchangePrice());
+        int configuredExchangeQuantity = rule.benefit().exchangeQuantity();
         int remainingExchangeQuantity = rule.benefit().applicableExchangeQuantity(
                 items.stream().mapToInt(CartItem::quantity).sum());
         BigDecimal discount = BigDecimal.ZERO;
+        boolean packagePriceApplied = false;
         for (CartItem item : items) {
             if (remainingExchangeQuantity <= 0) {
                 break;
             }
             int appliedQuantity = Math.min(item.quantity(), remainingExchangeQuantity);
-            BigDecimal lineDiscount = item.unitPrice().subtract(exchangePrice)
-                    .max(BigDecimal.ZERO)
-                    .multiply(BigDecimal.valueOf(appliedQuantity));
+            boolean packagePrice = configuredExchangeQuantity > 1
+                    && exchangePrice.compareTo(item.unitPrice()) >= 0;
+            if (packagePrice && appliedQuantity < configuredExchangeQuantity) {
+                return BenefitCalculation.blocked(List.of("换购商品数量未达到组合换购要求，需要 "
+                        + configuredExchangeQuantity + " 件。"));
+            }
+            if (item.inventoryQuantity() != null
+                    && item.inventoryQuantity().compareTo(BigDecimal.valueOf(appliedQuantity)) < 0) {
+                return BenefitCalculation.blocked(List.of("换购商品库存不足，商品 " + item.productCode()
+                        + " 库存 " + item.inventoryQuantity().stripTrailingZeros().toPlainString()
+                        + " 件，需要 " + appliedQuantity + " 件。"));
+            }
+            BigDecimal lineDiscount = packagePrice
+                    ? item.unitPrice().multiply(BigDecimal.valueOf(appliedQuantity)).subtract(exchangePrice)
+                            .max(BigDecimal.ZERO)
+                    : item.unitPrice().subtract(exchangePrice).max(BigDecimal.ZERO)
+                            .multiply(BigDecimal.valueOf(appliedQuantity));
             discount = discount.add(lineDiscount);
             remainingExchangeQuantity -= appliedQuantity;
+            packagePriceApplied = packagePriceApplied || packagePrice;
         }
 
         if (discount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -43,7 +60,10 @@ public class ExchangePurchaseBenefitCalculator extends AbstractBenefitCalculator
         }
 
         BigDecimal payable = totals.originalAmount().subtract(discount);
+        String priceText = packagePriceApplied
+                ? "满足油品门槛，适用商品按组合换购价 " + exchangePrice + " 元计算。"
+                : "满足油品门槛，适用商品按换购价 " + exchangePrice + " 元计算。";
         return BenefitCalculation.available(candidate(rule, totals.originalAmount(), payable, discount,
-                "满足油品门槛，适用商品按换购价 " + exchangePrice + " 元计算。"));
+                priceText));
     }
 }

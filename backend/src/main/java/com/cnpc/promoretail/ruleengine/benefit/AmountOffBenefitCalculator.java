@@ -36,6 +36,6 @@ public class AmountOffBenefitCalculator extends AbstractBenefitCalculator {
         BigDecimal discount = amountOff.min(eligibleSubtotal);
         BigDecimal payable = totals.originalAmount().subtract(discount);
         return BenefitCalculation.available(candidate(rule, totals.originalAmount(), payable, discount,
-                "命中满减促销，直接优惠 " + discount + " 元。"));
+                "命中满减促销，直接优惠 " + money(discount) + " 元。"));
     }
 }

@@ -5,6 +5,7 @@ import com.cnpc.promoretail.promotion.model.PromotionRuleAuditAction;
 import com.cnpc.promoretail.promotion.model.PromotionRuleAuditLog;
 import com.cnpc.promoretail.promotion.model.PromotionRuleDraft;
 import com.cnpc.promoretail.promotion.model.PromotionRuleVersion;
+import com.cnpc.promoretail.promotion.excludedcategory.PromotionRuleExcludedCategoryEnricher;
 import com.cnpc.promoretail.promotion.persistence.entity.PromotionRuleAuditLogEntity;
 import com.cnpc.promoretail.promotion.persistence.entity.PromotionRuleDraftEntity;
 import com.cnpc.promoretail.promotion.persistence.entity.PromotionRuleVersionEntity;
@@ -26,15 +27,18 @@ public class MybatisPromotionRuleRepository implements PromotionRuleRepository {
     private final PromotionRuleDraftMapper draftMapper;
     private final PromotionRuleVersionMapper versionMapper;
     private final PromotionRuleAuditLogMapper auditLogMapper;
+    private final PromotionRuleExcludedCategoryEnricher excludedCategoryEnricher;
 
     public MybatisPromotionRuleRepository(
             PromotionRuleDraftMapper draftMapper,
             PromotionRuleVersionMapper versionMapper,
-            PromotionRuleAuditLogMapper auditLogMapper
+            PromotionRuleAuditLogMapper auditLogMapper,
+            PromotionRuleExcludedCategoryEnricher excludedCategoryEnricher
     ) {
         this.draftMapper = draftMapper;
         this.versionMapper = versionMapper;
         this.auditLogMapper = auditLogMapper;
+        this.excludedCategoryEnricher = excludedCategoryEnricher;
     }
 
     @Override
@@ -72,6 +76,19 @@ public class MybatisPromotionRuleRepository implements PromotionRuleRepository {
     }
 
     @Override
+    public List<PromotionRuleDraft> findDraftsByStatus(PromotionRuleStatus status) {
+        LambdaQueryWrapper<PromotionRuleDraftEntity> wrapper = new LambdaQueryWrapper<PromotionRuleDraftEntity>()
+                .orderByDesc(PromotionRuleDraftEntity::getUpdatedAt);
+        if (status != null) {
+            wrapper.eq(PromotionRuleDraftEntity::getStatus, status.name());
+        }
+        return draftMapper.selectList(wrapper)
+                .stream()
+                .map(this::toDraft)
+                .toList();
+    }
+
+    @Override
     public PromotionRuleVersion saveVersion(PromotionRuleVersion version) {
         versionMapper.insert(toEntity(version));
         return version;
@@ -79,12 +96,14 @@ public class MybatisPromotionRuleRepository implements PromotionRuleRepository {
 
     @Override
     public List<PromotionRule> findConfirmedRules() {
-        return draftMapper.selectList(new LambdaQueryWrapper<PromotionRuleDraftEntity>()
+        List<PromotionRule> rules = draftMapper.selectList(new LambdaQueryWrapper<PromotionRuleDraftEntity>()
                         .eq(PromotionRuleDraftEntity::getStatus, PromotionRuleStatus.CONFIRMED.name())
                         .orderByAsc(PromotionRuleDraftEntity::getRuleId))
                 .stream()
                 .map(PromotionRuleDraftEntity::getRuleJson)
-                .filter(PromotionRule::active)
+                .toList();
+        return excludedCategoryEnricher.enrichAll(rules).stream()
+                .filter(this::checkoutEligible)
                 .toList();
     }
 
@@ -133,7 +152,7 @@ public class MybatisPromotionRuleRepository implements PromotionRuleRepository {
                 entity.getRuleJson(),
                 entity.getSourceImportId(),
                 entity.getSourceSheetName(),
-                entity.getSourceRowNumber(),
+                entity.getSourceRowNumber() <= 0 ? 1 : entity.getSourceRowNumber(),
                 PromotionRuleStatus.valueOf(entity.getStatus()),
                 Boolean.TRUE.equals(entity.getManualLocked()),
                 entity.getCreatedAt(),

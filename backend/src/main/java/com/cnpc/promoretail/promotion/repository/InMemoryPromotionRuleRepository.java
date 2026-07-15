@@ -51,10 +51,19 @@ public class InMemoryPromotionRuleRepository implements PromotionRuleRepository 
     }
 
     @Override
+    public List<PromotionRuleDraft> findDraftsByStatus(PromotionRuleStatus status) {
+        return draftsById.values().stream()
+                .filter(draft -> status == null || draft.status() == status)
+                .sorted(Comparator.comparing(PromotionRuleDraft::updatedAt).reversed())
+                .toList();
+    }
+
+    @Override
     public PromotionRuleVersion saveVersion(PromotionRuleVersion version) {
         if (version.status() == PromotionRuleStatus.CONFIRMED) {
             confirmedVersionByRuleId.put(version.ruleId(), version);
-        } else if (version.status() == PromotionRuleStatus.DISABLED) {
+        } else if (version.status() == PromotionRuleStatus.DISABLED
+                || version.status() == PromotionRuleStatus.ARCHIVED) {
             confirmedVersionByRuleId.remove(version.ruleId());
         }
         return version;
@@ -65,7 +74,7 @@ public class InMemoryPromotionRuleRepository implements PromotionRuleRepository 
         return draftsById.values().stream()
                 .filter(draft -> draft.status() == PromotionRuleStatus.CONFIRMED)
                 .map(PromotionRuleDraft::rule)
-                .filter(PromotionRule::active)
+                .filter(this::checkoutEligible)
                 .sorted(Comparator.comparing(PromotionRule::ruleId))
                 .toList();
     }

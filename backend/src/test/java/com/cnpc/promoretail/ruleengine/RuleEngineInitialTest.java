@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.cnpc.promoretail.ruleengine.benefit.AmountOffBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.BenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.BundlePriceBenefitCalculator;
+import com.cnpc.promoretail.ruleengine.benefit.CouponRedeemBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.ExchangePurchaseBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.FixedPriceBenefitCalculator;
+import com.cnpc.promoretail.ruleengine.benefit.FuelVolumeDiscountBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.GiftCouponBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.GiftItemBenefitCalculator;
 import com.cnpc.promoretail.ruleengine.benefit.PercentageDiscountBenefitCalculator;
@@ -19,7 +21,9 @@ import com.cnpc.promoretail.ruleengine.context.FuelType;
 import com.cnpc.promoretail.ruleengine.context.OrderContext;
 import com.cnpc.promoretail.ruleengine.context.StationContext;
 import com.cnpc.promoretail.ruleengine.explanation.DefaultExplanationBuilder;
+import com.cnpc.promoretail.ruleengine.model.BundleDefinition;
 import com.cnpc.promoretail.ruleengine.model.CalculationResult;
+import com.cnpc.promoretail.ruleengine.model.BundleItem;
 import com.cnpc.promoretail.ruleengine.model.PromotionBenefit;
 import com.cnpc.promoretail.ruleengine.model.PromotionCandidate;
 import com.cnpc.promoretail.ruleengine.model.PromotionCondition;
@@ -31,6 +35,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -239,6 +244,27 @@ class RuleEngineInitialTest {
     }
 
     @Test
+    void exchangePurchaseCanUsePackagePriceWhenPriceIsHigherThanUnitPrice() {
+        OrderContext context = order(
+                List.of(item("70356177", "红牛 维生素风味饮料 250ML", 3, "6.00", "包装饮料", "50")),
+                new FuelContext(FuelType.GASOLINE, "92", new BigDecimal("200.00"), BigDecimal.ZERO)
+        );
+        PromotionRule rule = rule("gasoline-redbull-package-exchange", PromotionRuleType.EXCHANGE_PURCHASE,
+                new PromotionCondition(Set.of("70356177"), Set.of(), Set.of(FuelType.GASOLINE),
+                        Set.of(), Set.of(), null, null, BigDecimal.ZERO, new BigDecimal("180.00"),
+                        false, new BigDecimal("1")),
+                PromotionBenefit.exchangePurchase(new BigDecimal("12.00"), 3),
+                "exchange_purchase");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("cand-gasoline-redbull-package-exchange");
+        assertThat(result.originalAmount()).isEqualByComparingTo("18.00");
+        assertThat(result.discountAmount()).isEqualByComparingTo("6.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("12.00");
+    }
+
+    @Test
     void insufficientFuelAmountBlocksExchangePurchase() {
         OrderContext context = order(
                 List.of(item("70545526", "格桑泉 蓝格天然饮用水 500ML", 4, "4.00", "包装饮料", "50")),
@@ -296,6 +322,26 @@ class RuleEngineInitialTest {
         assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
         assertThat(result.blockedPromotions().getFirst().reasons())
                 .anySatisfy(reason -> assertThat(reason.message()).contains("商品不在活动范围内"));
+    }
+
+    @Test
+    void exchangePurchaseBlocksWhenExchangeProductInventoryIsNotEnough() {
+        OrderContext context = order(
+                List.of(item("70545526", "格桑泉 蓝格天然饮用水 500ML", 4, "3.00", "包装饮料", "2")),
+                new FuelContext(FuelType.GASOLINE, "92", new BigDecimal("200.00"), BigDecimal.ZERO)
+        );
+        PromotionRule rule = rule("gasoline-water-exchange", PromotionRuleType.EXCHANGE_PURCHASE,
+                new PromotionCondition(Set.of("70545526"), Set.of(), Set.of(FuelType.GASOLINE),
+                        Set.of(), Set.of(), null, null, BigDecimal.ZERO, new BigDecimal("180.00"),
+                        false, BigDecimal.ZERO),
+                PromotionBenefit.exchangePurchase(new BigDecimal("2.00"), 4),
+                "exchange_purchase");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("换购商品库存不足"));
     }
 
     @Test
@@ -419,6 +465,65 @@ class RuleEngineInitialTest {
     }
 
     @Test
+    void giftItemBlocksWhenGiftInventoryIsNotEnough() {
+        PromotionEngine stockAwareEngine = engineWithGiftInventory("gift-milk", "0");
+        OrderContext context = order(List.of(item("milk", "便利店商品", 1, "40.00", "便利店", "10")));
+        PromotionRule rule = rule("buy-gift", PromotionRuleType.GIFT_ITEM,
+                new PromotionCondition(Set.of("milk"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("40.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.giftItem("gift-milk", "自有奶", 1),
+                "gift");
+
+        CalculationResult result = stockAwareEngine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("库存不足"));
+    }
+
+    @Test
+    void stackableGiftItemCanCoexistWithDirectDiscount() {
+        OrderContext context = order(List.of(item("milk", "便利店商品", 1, "40.00", "便利店", "10")));
+        PromotionRule gift = rule("buy-gift", PromotionRuleType.GIFT_ITEM,
+                new PromotionCondition(Set.of("milk"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("40.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.giftItem("gift-milk", "自有奶", 1),
+                "gift",
+                true);
+        PromotionRule amountOff = rule("milk-amount-off", PromotionRuleType.AMOUNT_OFF,
+                new PromotionCondition(Set.of("milk"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("40.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.amountOff(new BigDecimal("5.00")),
+                "direct_discount");
+
+        CalculationResult result = engine.calculate(context, List.of(gift, amountOff));
+
+        assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
+                .contains("cand-buy-gift", "cand-milk-amount-off");
+        assertThat(result.recommendedCandidateId()).isEqualTo("cand-milk-amount-off");
+    }
+
+    @Test
+    void nonStackableGiftItemDoesNotReuseDirectDiscountProduct() {
+        OrderContext context = order(List.of(item("milk", "便利店商品", 1, "40.00", "便利店", "10")));
+        PromotionRule gift = rule("buy-gift", PromotionRuleType.GIFT_ITEM,
+                new PromotionCondition(Set.of("milk"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("40.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.giftItem("gift-milk", "自有奶", 1),
+                "gift");
+        PromotionRule amountOff = rule("milk-amount-off", PromotionRuleType.AMOUNT_OFF,
+                new PromotionCondition(Set.of("milk"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("40.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.amountOff(new BigDecimal("5.00")),
+                "direct_discount");
+
+        CalculationResult result = engine.calculate(context, List.of(gift, amountOff));
+
+        assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
+                .containsExactly("original-price", "cand-milk-amount-off");
+    }
+
+    @Test
     void giftCouponRuleReturnsCoupon() {
         OrderContext context = order(
                 List.of(item("70424725", "奥利奥 0糖夹心饼干 97g", 1, "30.00", "零食", "20")),
@@ -434,6 +539,34 @@ class RuleEngineInitialTest {
 
         assertThat(candidate(result, "cand-fuel-gift-coupon").coupons()).hasSize(1);
         assertThat(candidate(result, "cand-fuel-gift-coupon").coupons().getFirst().couponName()).contains("便利店");
+        assertThat(candidate(result, "cand-fuel-gift-coupon").coupons().getFirst().amount())
+                .isEqualByComparingTo("6.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("30.00");
+        assertThat(result.discountAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void giftCouponBlocksWhenMemberRequiredButCustomerIsAnonymous() {
+        OrderContext context = new OrderContext(
+                new StationContext("station-001", "gas_station", "新疆"),
+                CustomerContext.anonymous(),
+                new FuelContext(FuelType.GASOLINE, "92", new BigDecimal("230.00"), BigDecimal.ZERO),
+                List.of(item("70424725", "奥利奥 0糖夹心饼干 97g", 1, "30.00", "零食", "20")),
+                LocalDate.of(2026, 7, 9),
+                LocalTime.of(20, 30)
+        );
+        PromotionRule rule = rule("fuel-gift-coupon", PromotionRuleType.GIFT_COUPON,
+                new PromotionCondition(Set.of(), Set.of(), Set.of(FuelType.GASOLINE), Set.of(), Set.of(),
+                        null, null, BigDecimal.ZERO, new BigDecimal("230.00"), true, BigDecimal.ZERO),
+                PromotionBenefit.giftCoupon("6元便利店商品券", new BigDecimal("6.00"), 2,
+                        new BigDecimal("20.00"), 15),
+                "coupon");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("会员"));
     }
 
     @Test
@@ -452,6 +585,141 @@ class RuleEngineInitialTest {
 
         assertThat(result.originalAmount()).isEqualByComparingTo("30.00");
         assertThat(result.discountAmount()).isEqualByComparingTo("5.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("25.00");
+    }
+
+    @Test
+    void bundlePriceUsesBundleItemsAndCalculatesAvailableSets() {
+        OrderContext context = order(List.of(
+                item("bundle-a", "组合商品A", 2, "15.00", "包装饮料", "10"),
+                item("bundle-b", "组合商品B", 2, "10.00", "车辅", "10")
+        ));
+        PromotionRule rule = rule("bundle-driving-package", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("driving-package",
+                        List.of(new BundleItem("bundle-a", 1), new BundleItem("bundle-b", 1)),
+                        new BigDecimal("20.00")),
+                "bundle");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.originalAmount()).isEqualByComparingTo("50.00");
+        assertThat(result.discountAmount()).isEqualByComparingTo("10.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("40.00");
+        assertThat(candidate(result, "cand-bundle-driving-package").explanation()).contains("2 套");
+    }
+
+    @Test
+    void bundlePriceLoadsStructuredBundleDefinitionFromProvider() {
+        PromotionEngine bundleEngine = engineWithBundleProvider(
+                new BundleDefinition("bundle-cng-water-drink", "CNG水饮包", new BigDecimal("7.65"),
+                        new BigDecimal("50.00"), "demo-lng-cng",
+                        List.of(new BundleItem("water-333", 1), new BundleItem("redbull", 1))),
+                code -> switch (code) {
+                    case "water-333" -> new BigDecimal("10");
+                    case "redbull" -> new BigDecimal("8");
+                    default -> BigDecimal.ZERO;
+                }
+        );
+        OrderContext context = order(List.of(
+                item("water-333", "矿泉水", 2, "3.00", "水饮", "10"),
+                item("redbull", "红牛", 2, "6.00", "饮料", "8")
+        ), new FuelContext(FuelType.CNG, "CNG", new BigDecimal("80.00"), BigDecimal.ZERO));
+        PromotionRule rule = rule("bundle-cng-rule", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("bundle-cng-water-drink", List.of(), BigDecimal.ZERO),
+                "direct_discount");
+
+        CalculationResult result = bundleEngine.calculate(context, List.of(rule));
+
+        assertThat(result.discountAmount()).isEqualByComparingTo("2.70");
+        assertThat(result.payableAmount()).isEqualByComparingTo("15.30");
+        assertThat(candidate(result, "cand-bundle-cng-rule").explanation()).contains("2 套");
+    }
+
+    @Test
+    void bundlePriceBlocksWhenStructuredBundleFuelThresholdIsNotMet() {
+        PromotionEngine bundleEngine = engineWithBundleProvider(
+                new BundleDefinition("bundle-lng-long-haul", "LNG长途包", new BigDecimal("20.40"),
+                        new BigDecimal("1000.00"), "demo-lng-cng",
+                        List.of(new BundleItem("redbull", 1), new BundleItem("tissue", 1))),
+                code -> new BigDecimal("10")
+        );
+        OrderContext context = order(List.of(
+                item("redbull", "红牛", 1, "6.00", "饮料", "10"),
+                item("tissue", "抽纸", 1, "15.00", "纸品", "10")
+        ), new FuelContext(FuelType.LNG, "LNG", new BigDecimal("200.00"), BigDecimal.ZERO));
+        PromotionRule rule = rule("bundle-lng-rule", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("bundle-lng-long-haul", List.of(), BigDecimal.ZERO),
+                "direct_discount");
+
+        CalculationResult result = bundleEngine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("油品消费未满门槛"));
+    }
+
+    @Test
+    void bundlePriceBlocksWhenBundleItemIsMissing() {
+        OrderContext context = order(List.of(item("bundle-a", "组合商品A", 1, "15.00", "包装饮料", "10")));
+        PromotionRule rule = rule("bundle-driving-package", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("driving-package",
+                        List.of(new BundleItem("bundle-a", 1), new BundleItem("bundle-b", 1)),
+                        new BigDecimal("20.00")),
+                "bundle");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("缺少商品 bundle-b"));
+    }
+
+    @Test
+    void bundlePriceBlocksWhenBundleItemQuantityIsNotEnough() {
+        OrderContext context = order(List.of(
+                item("bundle-a", "组合商品A", 1, "15.00", "包装饮料", "10"),
+                item("bundle-b", "组合商品B", 1, "10.00", "车辅", "10")
+        ));
+        PromotionRule rule = rule("bundle-driving-package", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("driving-package",
+                        List.of(new BundleItem("bundle-a", 2), new BundleItem("bundle-b", 1)),
+                        new BigDecimal("20.00")),
+                "bundle");
+
+        CalculationResult result = engine.calculate(context, List.of(rule));
+
+        assertThat(result.recommendedCandidateId()).isEqualTo("original-price");
+        assertThat(result.blockedPromotions().getFirst().reasons())
+                .anySatisfy(reason -> assertThat(reason.message()).contains("数量不足"));
+    }
+
+    @Test
+    void bundlePricePreventsProductReuseWithDirectDiscount() {
+        OrderContext context = order(List.of(
+                item("bundle-a", "组合商品A", 1, "20.00", "包装饮料", "10"),
+                item("bundle-b", "组合商品B", 1, "20.00", "车辅", "10")
+        ));
+        PromotionRule bundle = rule("bundle-driving-package", PromotionRuleType.BUNDLE_PRICE,
+                PromotionCondition.empty(),
+                PromotionBenefit.bundlePrice("driving-package",
+                        List.of(new BundleItem("bundle-a", 1), new BundleItem("bundle-b", 1)),
+                        new BigDecimal("25.00")),
+                "bundle");
+        PromotionRule amountOff = rule("bundle-a-amount-off", PromotionRuleType.AMOUNT_OFF,
+                new PromotionCondition(Set.of("bundle-a"), Set.of(), Set.of(), Set.of(), Set.of(), null, null,
+                        new BigDecimal("20.00"), BigDecimal.ZERO, false, BigDecimal.ZERO),
+                PromotionBenefit.amountOff(new BigDecimal("5.00")),
+                "direct_discount");
+
+        CalculationResult result = engine.calculate(context, List.of(bundle, amountOff));
+
+        assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
+                .containsExactly("original-price", "cand-bundle-driving-package");
         assertThat(result.payableAmount()).isEqualByComparingTo("25.00");
     }
 
@@ -492,6 +760,40 @@ class RuleEngineInitialTest {
         assertThat(result.payableAmount()).isEqualByComparingTo("9.90");
     }
 
+    @Test
+    void lowerNumericPriorityIsRecommendedWhenBenefitsTie() {
+        OrderContext context = order(List.of(item("70424725", "priority tie sample", 1, "20.00", "snack", "20")));
+        PromotionCondition condition = new PromotionCondition(Set.of("70424725"), Set.of(), Set.of(), Set.of(), Set.of(),
+                null, null, BigDecimal.ZERO, BigDecimal.ZERO, false, BigDecimal.ZERO);
+        PromotionRule priority10 = rule("fixed-priority-10", PromotionRuleType.FIXED_PRICE,
+                condition, PromotionBenefit.fixedPrice(new BigDecimal("9.90")), "direct_discount", true, 10);
+        PromotionRule priority50 = rule("fixed-priority-50", PromotionRuleType.FIXED_PRICE,
+                condition, PromotionBenefit.fixedPrice(new BigDecimal("9.90")), "direct_discount", true, 50);
+
+        CalculationResult result = engine.calculate(context, List.of(priority50, priority10));
+
+        assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
+                .contains("cand-fixed-priority-10", "cand-fixed-priority-50");
+        assertThat(result.recommendedCandidateId()).isEqualTo("cand-fixed-priority-10");
+    }
+
+    @Test
+    void exclusiveGroupKeepsLowerNumericPriorityWhenBenefitsTie() {
+        OrderContext context = order(List.of(item("70424725", "priority conflict sample", 1, "20.00", "snack", "20")));
+        PromotionCondition condition = new PromotionCondition(Set.of("70424725"), Set.of(), Set.of(), Set.of(), Set.of(),
+                null, null, BigDecimal.ZERO, BigDecimal.ZERO, false, BigDecimal.ZERO);
+        PromotionRule priority10 = rule("fixed-priority-10", PromotionRuleType.FIXED_PRICE,
+                condition, PromotionBenefit.fixedPrice(new BigDecimal("9.90")), "direct_discount", false, 10);
+        PromotionRule priority50 = rule("fixed-priority-50", PromotionRuleType.FIXED_PRICE,
+                condition, PromotionBenefit.fixedPrice(new BigDecimal("9.90")), "direct_discount", false, 50);
+
+        CalculationResult result = engine.calculate(context, List.of(priority50, priority10));
+
+        assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
+                .containsExactly("original-price", "cand-fixed-priority-10");
+        assertThat(result.recommendedCandidateId()).isEqualTo("cand-fixed-priority-10");
+    }
+
     private static List<BenefitCalculator> calculators() {
         return List.of(
                 new FixedPriceBenefitCalculator(),
@@ -500,7 +802,57 @@ class RuleEngineInitialTest {
                 new ExchangePurchaseBenefitCalculator(),
                 new GiftItemBenefitCalculator(),
                 new GiftCouponBenefitCalculator(),
-                new BundlePriceBenefitCalculator()
+                new BundlePriceBenefitCalculator(),
+                new CouponRedeemBenefitCalculator(),
+                new FuelVolumeDiscountBenefitCalculator()
+        );
+    }
+
+    private static PromotionEngine engineWithGiftInventory(String productCode, String availableQuantity) {
+        return new DefaultPromotionEngine(
+                new DefaultConditionMatcher(),
+                List.of(
+                        new FixedPriceBenefitCalculator(),
+                        new PercentageDiscountBenefitCalculator(),
+                        new AmountOffBenefitCalculator(),
+                        new ExchangePurchaseBenefitCalculator(),
+                        new GiftItemBenefitCalculator(code -> productCode.equals(code)
+                                ? new BigDecimal(availableQuantity)
+                                : new BigDecimal("999999")),
+                        new GiftCouponBenefitCalculator(),
+                        new BundlePriceBenefitCalculator(),
+                        new CouponRedeemBenefitCalculator(),
+                        new FuelVolumeDiscountBenefitCalculator()
+                ),
+                new DefaultConflictResolver(),
+                new DefaultCandidateRanker(),
+                new DefaultExplanationBuilder()
+        );
+    }
+
+    private static PromotionEngine engineWithBundleProvider(
+            BundleDefinition definition,
+            java.util.function.Function<String, BigDecimal> inventory
+    ) {
+        return new DefaultPromotionEngine(
+                new DefaultConditionMatcher(),
+                List.of(
+                        new FixedPriceBenefitCalculator(),
+                        new PercentageDiscountBenefitCalculator(),
+                        new AmountOffBenefitCalculator(),
+                        new ExchangePurchaseBenefitCalculator(),
+                        new GiftItemBenefitCalculator(inventory::apply),
+                        new GiftCouponBenefitCalculator(),
+                        new BundlePriceBenefitCalculator(inventory::apply,
+                                bundleId -> definition.bundleId().equals(bundleId)
+                                        ? Optional.of(definition)
+                                        : Optional.empty()),
+                        new CouponRedeemBenefitCalculator(),
+                        new FuelVolumeDiscountBenefitCalculator()
+                ),
+                new DefaultConflictResolver(),
+                new DefaultCandidateRanker(),
+                new DefaultExplanationBuilder()
         );
     }
 
@@ -511,7 +863,30 @@ class RuleEngineInitialTest {
             PromotionBenefit benefit,
             String exclusiveGroup
     ) {
-        return new PromotionRule(ruleId, ruleId, type, 50, exclusiveGroup, false,
+        return rule(ruleId, type, condition, benefit, exclusiveGroup, false);
+    }
+
+    private static PromotionRule rule(
+            String ruleId,
+            PromotionRuleType type,
+            PromotionCondition condition,
+            PromotionBenefit benefit,
+            String exclusiveGroup,
+            boolean stackable
+    ) {
+        return rule(ruleId, type, condition, benefit, exclusiveGroup, stackable, 50);
+    }
+
+    private static PromotionRule rule(
+            String ruleId,
+            PromotionRuleType type,
+            PromotionCondition condition,
+            PromotionBenefit benefit,
+            String exclusiveGroup,
+            boolean stackable,
+            int priority
+    ) {
+        return new PromotionRule(ruleId, ruleId, type, priority, exclusiveGroup, stackable,
                 PromotionRuleStatus.CONFIRMED, condition, benefit, "test-v1");
     }
 

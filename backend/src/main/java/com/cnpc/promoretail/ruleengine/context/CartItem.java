@@ -42,5 +42,10 @@ public record CartItem(
     public boolean excludedByCategory(Set<String> excludedCategories) {
         return category != null && excludedCategories != null && excludedCategories.contains(category);
     }
-}
 
+    public boolean includedByCategory(Set<String> includedCategories) {
+        return includedCategories == null
+                || includedCategories.isEmpty()
+                || (category != null && includedCategories.contains(category));
+    }
+}

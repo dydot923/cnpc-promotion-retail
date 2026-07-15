@@ -5,5 +5,9 @@ public enum PromotionRuleAuditAction {
     CONFIRMED,
     REJECTED,
     REVISED,
-    DISABLED
+    DISABLED,
+    ARCHIVED,
+    BATCH_CONFIRMED,
+    BATCH_REVISED,
+    BATCH_ARCHIVED
 }

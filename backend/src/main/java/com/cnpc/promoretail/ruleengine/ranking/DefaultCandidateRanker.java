@@ -12,7 +12,7 @@ public class DefaultCandidateRanker implements CandidateRanker {
         return candidates.stream()
                 .min(Comparator.comparing(PromotionCandidate::payableAmount)
                         .thenComparing(Comparator.comparing(PromotionCandidate::discountAmount).reversed())
-                        .thenComparing(Comparator.comparing(PromotionCandidate::priority).reversed())
+                        .thenComparing(PromotionCandidate::priority)
                         .thenComparing(PromotionCandidate::candidateId));
     }
 }
