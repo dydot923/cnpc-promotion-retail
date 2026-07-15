@@ -10,6 +10,7 @@ public record CartTotals(BigDecimal originalAmount) {
         BigDecimal total = context.cartItems().stream()
                 .map(item -> item.unitPrice().multiply(BigDecimal.valueOf(item.quantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .add(context.fuel().amount())
                 .add(context.rechargeAmount())
                 .setScale(2, RoundingMode.HALF_UP);
         return new CartTotals(total);

@@ -214,9 +214,9 @@ class RuleEngineInitialTest {
 
         CalculationResult result = engine.calculate(context, List.of(rule));
 
-        assertThat(result.originalAmount()).isEqualByComparingTo("16.00");
+        assertThat(result.originalAmount()).isEqualByComparingTo("216.00");
         assertThat(result.discountAmount()).isEqualByComparingTo("8.00");
-        assertThat(result.payableAmount()).isEqualByComparingTo("8.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("208.00");
     }
 
     @Test
@@ -237,9 +237,9 @@ class RuleEngineInitialTest {
         assertThat(result.availableCandidates()).extracting(PromotionCandidate::candidateId)
                 .containsExactly("original-price", "cand-diesel-water-exchange");
         assertThat(result.recommendedCandidateId()).isEqualTo("cand-diesel-water-exchange");
-        assertThat(result.originalAmount()).isEqualByComparingTo("24.00");
+        assertThat(result.originalAmount()).isEqualByComparingTo("324.00");
         assertThat(result.discountAmount()).isEqualByComparingTo("8.00");
-        assertThat(result.payableAmount()).isEqualByComparingTo("16.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("316.00");
         assertThat(result.discountAmount().scale()).isEqualTo(2);
     }
 
@@ -259,9 +259,9 @@ class RuleEngineInitialTest {
         CalculationResult result = engine.calculate(context, List.of(rule));
 
         assertThat(result.recommendedCandidateId()).isEqualTo("cand-gasoline-redbull-package-exchange");
-        assertThat(result.originalAmount()).isEqualByComparingTo("18.00");
+        assertThat(result.originalAmount()).isEqualByComparingTo("218.00");
         assertThat(result.discountAmount()).isEqualByComparingTo("6.00");
-        assertThat(result.payableAmount()).isEqualByComparingTo("12.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("212.00");
     }
 
     @Test
@@ -541,7 +541,7 @@ class RuleEngineInitialTest {
         assertThat(candidate(result, "cand-fuel-gift-coupon").coupons().getFirst().couponName()).contains("便利店");
         assertThat(candidate(result, "cand-fuel-gift-coupon").coupons().getFirst().amount())
                 .isEqualByComparingTo("6.00");
-        assertThat(result.payableAmount()).isEqualByComparingTo("30.00");
+        assertThat(result.payableAmount()).isEqualByComparingTo("260.00");
         assertThat(result.discountAmount()).isEqualByComparingTo("0.00");
     }
 
@@ -633,7 +633,7 @@ class RuleEngineInitialTest {
         CalculationResult result = bundleEngine.calculate(context, List.of(rule));
 
         assertThat(result.discountAmount()).isEqualByComparingTo("2.70");
-        assertThat(result.payableAmount()).isEqualByComparingTo("15.30");
+        assertThat(result.payableAmount()).isEqualByComparingTo("95.30");
         assertThat(candidate(result, "cand-bundle-cng-rule").explanation()).contains("2 套");
     }
 

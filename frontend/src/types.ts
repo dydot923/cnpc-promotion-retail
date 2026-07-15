@@ -55,6 +55,7 @@ export type OrderContext = {
   businessDate: string;
   businessTime: string;
   availableCoupons?: Coupon[];
+  rechargeAmount?: number;
 };
 
 export type CheckoutCalculateRequest = {
@@ -63,13 +64,17 @@ export type CheckoutCalculateRequest = {
   transactionTime?: string;
   stationType?: string;
   stationProvince?: string;
+  stationCity?: string;
+  stationCode?: string;
   isMember?: boolean;
   memberLevel?: string | null;
   memberCode?: string | null;
   memberBirthMonth?: number | null;
+  paymentMethod?: string;
   fuelType?: FuelType;
   fuelAmount?: number;
   fuelVolume?: number;
+  rechargeAmount?: number;
   availableCoupons?: Coupon[];
   selectedCouponIds?: string[];
 };
@@ -166,7 +171,25 @@ export type CheckoutCalculateResponse = {
   ruleVersion?: string | null;
   ruleVersionIds: string[];
   inventoryWarnings: InventoryWarning[];
+  pointsPreview?: PointsPreview | null;
   originalPriceFallback: Candidate;
+};
+
+export type PointsPreview = {
+  activityId: string;
+  ruleId: string;
+  activityName: string;
+  multiplier: number;
+  estimatedPoints: number;
+};
+
+export type Station = {
+  stationCode: string;
+  stationName: string;
+  province: string;
+  city?: string | null;
+  district?: string | null;
+  stationType: string;
 };
 
 export type CheckoutConfirmRequest = {

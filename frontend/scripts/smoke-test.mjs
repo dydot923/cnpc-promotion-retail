@@ -4,13 +4,15 @@ const frontendBaseUrl = process.env.FRONTEND_BASE_URL || "http://localhost:5173"
 const requireFrontendSmoke = process.env.REQUIRE_FRONTEND_SMOKE === "true";
 
 const requiredCheckoutLabels = [
-  "9.9 固定价",
-  "满减",
-  "买赠",
-  "赠券",
-  "组合包",
-  "加油换购",
-  "无促销原价",
+  "活动看板逐项验收",
+  "A1/A2 逢7气惠 + 3倍积分",
+  "A4 逢8 CN98每升立减",
+  "A5 逢10超级十惠充值",
+  "G3 9.9元零食专区",
+  "G7 单品安全促销价",
+  "H1 加油换购驾驶包",
+  "验收日期",
+  "充值金额",
   "可用促销方案",
   "不可用促销",
   "原价兜底",
@@ -73,7 +75,7 @@ async function main() {
 
   assert(files.theme.includes("#D71920") && files.theme.includes("#003F88") && files.theme.includes("#FFB81C"), "CNPC theme colors missing");
   assert(files.styles.includes(".header-brand-stripe"), "brand stripe missing");
-  assert(!files.styles.includes("@media"), "desktop fixed layout should not include responsive media rules");
+  assert(files.styles.includes("@media (max-width: 1100px)"), "responsive checkout layout missing");
   assert(!files.styles.includes("useBreakpoint"), "desktop fixed layout should not use breakpoint helpers");
 
   assert(files.request.includes("VITE_API_BASE_URL") && files.request.includes("10_000"), "request wrapper timeout/base URL missing");

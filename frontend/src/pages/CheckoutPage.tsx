@@ -33,6 +33,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { calculateCheckout, confirmCheckout, fetchExchangeOffers } from "../api/checkout";
 import { fetchProductByBarcode, searchProducts } from "../api/products";
+import { fetchStations } from "../api/stations";
 import EmptyState from "../components/EmptyState";
 import Price from "../components/Price";
 import type {
@@ -73,8 +74,13 @@ type CustomerForm = {
 };
 
 type TransactionContextForm = {
+  stationCode?: string;
   stationType: string;
   stationProvince?: string;
+  businessDate?: string;
+  businessTime?: string;
+  rechargeAmount?: number;
+  paymentMethod?: string;
   memberBirthMonth?: number;
   couponId?: string;
   couponName?: string;
@@ -97,6 +103,8 @@ type ProductLookupResult = {
 type DemoCase = {
   key: string;
   label: string;
+  description: string;
+  expectedRuleIds: string[];
   cartItems: CartItem[];
   fuel: FuelForm;
   customer: CustomerForm;
@@ -105,63 +113,184 @@ type DemoCase = {
 
 const demoCases: DemoCase[] = [
   {
-    key: "fixed",
-    label: "9.9 固定价",
-    cartItems: [item("fixed-sku", "固定价商品", 1, 12, "零食")],
-    fuel: fuel(),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
+    key: "a1-a2",
+    label: "A1/A2 逢7气惠 + 3倍积分",
+    description: "7/17/27 日，LNG 消费 500 元，赠 LNG/便利店券并预览 3 倍积分。",
+    expectedRuleIds: ["abv2-a1-day7-gas-coupon"],
+    cartItems: [],
+    fuel: fuel("LNG", "LNG", 500, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
   },
   {
-    key: "amount",
-    label: "满减",
-    cartItems: [item("amount-sku", "满减商品", 1, 120, "家庭食品")],
+    key: "a3",
+    label: "A3 加气站便利店9折",
+    description: "加气站非逢 7 日期，便利店商品按 9 折结算。",
+    expectedRuleIds: ["abv2-a3-gas-filling-discount"],
+    cartItems: [item("70727893", "优斯麦尔 西梅复合果汁饮品 0.3L", 2, 5.5, "包装饮料", 30)],
     fuel: fuel(),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16", stationType: "gas_filling_station" }
   },
   {
-    key: "giftItem",
-    label: "买赠",
-    cartItems: [item("gift-buy-sku", "买赠商品", 1, 40, "便利店")],
-    fuel: fuel(),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
+    key: "a4",
+    label: "A4 逢8 CN98每升立减",
+    description: "8/18/28 日，CN98 加油 10 升，每升立减 0.8 元。",
+    expectedRuleIds: ["abv2-a4-cn98-volume-discount"],
+    cartItems: [],
+    fuel: fuel("CN98", "98", 100, 10),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-18" }
   },
   {
-    key: "giftCoupon",
-    label: "赠券",
-    cartItems: [item("coupon-sku", "赠券商品", 1, 30, "便利店")],
+    key: "a5",
+    label: "A5 逢10超级十惠充值",
+    description: "10/20/30 日，金卡会员充值 1000 元，展示普通券包与金卡加赠券。",
+    expectedRuleIds: ["abv2-a5-day10-super-1000-gold"],
+    cartItems: [],
     fuel: fuel(),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-20", rechargeAmount: 1000 }
   },
   {
-    key: "bundle",
-    label: "组合包",
+    key: "a6",
+    label: "A6 小额充值666赠券",
+    description: "非十惠日充值 666 元，赠 3 张汽油券和 3 张便利店券。",
+    expectedRuleIds: ["abv2-a6-small-recharge-666"],
+    cartItems: [],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-21", rechargeAmount: 666 }
+  },
+  {
+    key: "e1",
+    label: "E1 买油赠非油券",
+    description: "会员汽油消费满 230 元，赠香烟券和便利店券。",
+    expectedRuleIds: ["abv2-e1-gasoline-gift-coupons"],
+    cartItems: [],
+    fuel: fuel("GASOLINE", "92", 230, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "e2",
+    label: "E2 伊力特整件赠汽油券",
+    description: "会员购买整件伊力特 250ml，赠 2 张 100 元汽油券。",
+    expectedRuleIds: ["abv2-e2-ilite-250-case-coupon"],
+    cartItems: [item("70690981", "优斯麦尔 46度伊力特（佳藏）250ML", 10, 68, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "f1",
+    label: "F1 CNG买气送水",
+    description: "CNG 单笔满 50 元，赠 2 瓶格桑泉。",
+    expectedRuleIds: ["abv2-f1-cng-gift-water"],
+    cartItems: [],
+    fuel: fuel("CNG", "CNG", 50, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11", stationType: "gas_filling_station" }
+  },
+  {
+    key: "g1",
+    label: "G1 逢7加气站全场9折",
+    description: "7/17/27 日，加气站便利店商品全场 9 折。",
+    expectedRuleIds: ["abv2-g1-day7-gas-filling-discount"],
+    cartItems: [item("70727893", "优斯麦尔 西梅复合果汁饮品 0.3L", 2, 5.5, "包装饮料", 30)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
+  },
+  {
+    key: "g2",
+    label: "G2 逢9油站9折+3倍积分",
+    description: "9/19/29 日，加油站便利店 9 折并预览 3 倍积分。",
+    expectedRuleIds: ["abv2-g2-day9-gas-station-discount"],
+    cartItems: [item("70727893", "优斯麦尔 西梅复合果汁饮品 0.3L", 2, 5.5, "包装饮料", 30)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-19" }
+  },
+  {
+    key: "g3",
+    label: "G3 9.9元零食专区",
+    description: "录入活动看板 9.9 专区真实商品，执行固定价 9.9 元。",
+    expectedRuleIds: ["abv2-99-zone-70000639"],
+    cartItems: [item("70000639", "好丽友 蛋黄派 6枚", 1, 11, "零食", 6)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g4",
+    label: "G4 赛事啤酒赠券+夜间折扣",
+    description: "赛事期 19:00，会员购买啤酒满 66 元，赠券并叠加夜间 8.8 折。",
+    expectedRuleIds: ["abv2-g4-event-beer-coupon", "abv2-g4-event-night-discount"],
+    cartItems: [item("70488371", "乌苏 小麦白罐装啤酒 500ML", 9, 8, "啤酒", 30)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-15", businessTime: "19:00:00" }
+  },
+  {
+    key: "g5",
+    label: "G5 中秋满减+赠券",
+    description: "9 月会员购买月饼礼盒满 226 元，减 50 元并赠 2 张汽油券。",
+    expectedRuleIds: ["abv2-g5-mid-autumn-composite"],
+    cartItems: [item("70538246", "葡萄树 乳酪月饼 450G", 2, 169, "月饼礼盒", 30)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-09-15" }
+  },
+  {
+    key: "g6",
+    label: "G6 伊力特会员价+赠券",
+    description: "会员购买 2 瓶伊力特 250ml，显示会员固定价和便利店券。",
+    expectedRuleIds: ["abv2-g6-ilite-250-fixed", "abv2-g6-ilite-250-coupon"],
+    cartItems: [item("70690981", "优斯麦尔 46度伊力特（佳藏）250ML", 2, 68, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g7",
+    label: "G7 单品安全促销价",
+    description: "录入原缺价清单商品，执行已确认的安全促销价 4.25 元。",
+    expectedRuleIds: ["audit-personalized-fixed-70485561"],
+    cartItems: [item("70485561", "果子熟了 金桂乌龙茶 500ML", 1, 5, "包装饮料", 7)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "h1",
+    label: "H1 加油换购驾驶包",
+    description: "汽油满 200 元，驾驶包商品按组合价 25 元换购。",
+    expectedRuleIds: ["abv2-bundle-abv2-driving-package"],
     cartItems: [
-      item("70536790", "玻璃水 2L", 1, 8, "车辅"),
-      item("70545526", "格桑泉 500ml", 1, 3, "包装饮料")
+      item("70341453", "好客壹生牌 软抽 3层120抽", 1, 15, "日用品", 343),
+      item("70356177", "红牛 维生素风味饮料 250ML", 3, 6, "包装饮料", 5747),
+      item("70536790", "咔咔酷优特 0℃玻璃水 2L", 2, 8, "车辅", 1264)
     ],
     fuel: fuel("GASOLINE", "92", 220, 0),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
   },
   {
-    key: "exchange",
-    label: "加油换购",
-    cartItems: [item("70545523", "格桑泉 330ml", 4, 2.5, "包装饮料")],
-    fuel: fuel("GASOLINE", "92", 220, 0),
-    customer: { member: true, memberLevel: "gold", memberCode: "member-001" }
-  },
-  {
-    key: "original",
-    label: "无促销原价",
-    cartItems: [item("no-promo-sku", "普通商品", 1, 18, "便利店")],
-    fuel: fuel(),
-    customer: { member: false, memberLevel: "", memberCode: "" }
+    key: "h2",
+    label: "H2 加油换购红牛3罐",
+    description: "汽油满 180 元，3 罐红牛按 12 元换购。",
+    expectedRuleIds: ["abv2-h2-redbull-gasoline"],
+    cartItems: [item("70356177", "红牛 维生素风味饮料 250ML", 3, 6, "包装饮料", 5747)],
+    fuel: fuel("GASOLINE", "92", 180, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
   }
 ];
 
 const stationTypeOptions = [
   { value: "gas_station", label: "加油站" },
-  { value: "gas_cng", label: "CNG 站" },
-  { value: "gas_lng", label: "LNG 站" }
+  { value: "gas_filling_station", label: "加气站（CNG/LNG）" }
 ];
 
 const fuelTypeOptions = [
@@ -187,6 +316,7 @@ export default function CheckoutPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [barcode, setBarcode] = useState("");
   const [mode, setMode] = useState<CheckoutMode>("shop");
+  const [loadedDemoKey, setLoadedDemoKey] = useState<string>();
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>();
   const [latestConfirmationId, setLatestConfirmationId] = useState<string>();
   const [api, contextHolder] = message.useMessage();
@@ -195,6 +325,18 @@ export default function CheckoutPage() {
   const watchedFuelAmount = Form.useWatch("amount", fuelForm) as number | undefined;
   const watchedStationType = Form.useWatch("stationType", contextForm) as string | undefined;
   const watchedStationProvince = Form.useWatch("stationProvince", contextForm) as string | undefined;
+  const watchedBusinessDate = Form.useWatch("businessDate", contextForm) as string | undefined;
+  const watchedRechargeAmount = Form.useWatch("rechargeAmount", contextForm) as number | undefined;
+
+  const stationsQuery = useQuery({ queryKey: ["stations"], queryFn: fetchStations, staleTime: 5 * 60_000 });
+  const stationOptions = useMemo(
+    () =>
+      (stationsQuery.data || []).map((station) => ({
+        value: station.stationCode,
+        label: `${station.stationName}（${station.stationCode}）`
+      })),
+    [stationsQuery.data]
+  );
 
   const checkoutMutation = useMutation({
     mutationFn: async (request: CheckoutCalculateRequest) => {
@@ -254,13 +396,14 @@ export default function CheckoutPage() {
       watchedFuelType,
       watchedFuelAmount,
       watchedStationType,
-      watchedStationProvince
+      watchedStationProvince,
+      watchedBusinessDate
     ],
     queryFn: () =>
       fetchExchangeOffers({
         fuelType: watchedFuelType || "GASOLINE",
         fuelAmount: Number(watchedFuelAmount || 0),
-        businessDate: currentBusinessTime().businessDate,
+        businessDate: watchedBusinessDate || currentBusinessTime().businessDate,
         stationType: watchedStationType || "gas_station",
         stationProvince: watchedStationProvince || "新疆"
       }),
@@ -269,6 +412,11 @@ export default function CheckoutPage() {
   });
 
   const result = checkoutMutation.data;
+  const activeDemo = useMemo(() => demoCases.find((demo) => demo.key === loadedDemoKey), [loadedDemoKey]);
+  const promotionCandidates = useMemo(
+    () => uniquePromotionCandidates(result?.availableCandidates || []),
+    [result]
+  );
   const recommended = useMemo(
     () => result?.availableCandidates.find((candidate) => candidate.candidateId === result.recommendedCandidateId),
     [result]
@@ -284,6 +432,12 @@ export default function CheckoutPage() {
   }, [result, selectedCandidateId]);
   const cartCount = useMemo(() => cartItems.reduce((total, cartItem) => total + Number(cartItem.quantity || 0), 0), [cartItems]);
   const cartTotal = useMemo(() => sumCart(cartItems), [cartItems]);
+  const hasTransactionInput = cartItems.length > 0
+    || Number(watchedFuelAmount || 0) > 0
+    || Number(watchedRechargeAmount || 0) > 0;
+  const transactionInputTotal = cartTotal
+    + Number(watchedFuelAmount || 0)
+    + Number(watchedRechargeAmount || 0);
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
@@ -345,6 +499,7 @@ export default function CheckoutPage() {
   }
 
   function loadDemo(demo: DemoCase) {
+    setLoadedDemoKey(demo.key);
     setCartItems(demo.cartItems);
     fuelForm.setFieldsValue(demo.fuel);
     customerForm.setFieldsValue(demo.customer);
@@ -359,6 +514,7 @@ export default function CheckoutPage() {
   }
 
   function applyMode(nextMode: CheckoutMode) {
+    setLoadedDemoKey(undefined);
     setMode(nextMode);
     if (nextMode === "shop") {
       fuelForm.setFieldsValue(fuel());
@@ -374,7 +530,7 @@ export default function CheckoutPage() {
       fuelForm.setFieldsValue(fuel("GASOLINE", "92", 200, 0));
     }
     if (nextMode === "coupon") {
-      customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "" });
+      customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "demo-member-002" });
       contextForm.setFieldsValue({
         couponId: "coupon-demo-001",
         couponName: "会员抵扣券",
@@ -508,21 +664,23 @@ export default function CheckoutPage() {
   }
 
   async function calculate() {
-    if (cartItems.length === 0) {
-      api.warning("购物车为空，无法计算促销");
-      barcodeInputRef.current?.focus();
-      return;
-    }
     const fuelValues = await fuelForm.validateFields();
     const customerValues = await customerForm.validateFields();
     const contextValues = await contextForm.validateFields();
-    const { businessDate, businessTime } = currentBusinessTime();
+    if (cartItems.length === 0 && Number(fuelValues.amount || 0) <= 0 && Number(contextValues.rechargeAmount || 0) <= 0) {
+      api.warning("请先录入商品、油品金额或充值金额");
+      barcodeInputRef.current?.focus();
+      return;
+    }
+    const current = currentBusinessTime();
+    const businessDate = contextValues.businessDate || current.businessDate;
+    const businessTime = normalizeBusinessTime(contextValues.businessTime || current.businessTime);
     const selectedCouponIds = resolveSelectedCouponIds(contextValues);
     const availableCoupons = buildAvailableCoupons(contextValues);
     const request: CheckoutCalculateRequest = {
       orderContext: {
         station: {
-          stationId: "station-001",
+          stationId: contextValues.stationCode || "1-A6501-C001-S001",
           stationType: contextValues.stationType || "gas_station",
           region: contextValues.stationProvince || "新疆"
         },
@@ -542,19 +700,23 @@ export default function CheckoutPage() {
         cartItems,
         businessDate,
         businessTime,
-        availableCoupons
+        availableCoupons,
+        rechargeAmount: Number(contextValues.rechargeAmount || 0)
       },
       transactionDate: businessDate,
       transactionTime: businessTime,
       stationType: contextValues.stationType || "gas_station",
       stationProvince: contextValues.stationProvince || "新疆",
+      stationCode: contextValues.stationCode || "1-A6501-C001-S001",
       isMember: customerValues.member,
       memberLevel: customerValues.member ? customerValues.memberLevel || "gold" : null,
       memberCode: customerValues.member ? customerValues.memberCode || null : null,
       memberBirthMonth: customerValues.member ? contextValues.memberBirthMonth || null : null,
+      paymentMethod: contextValues.paymentMethod || "E_ENJOY_CARD",
       fuelType: fuelValues.fuelType,
       fuelAmount: fuelValues.amount || 0,
       fuelVolume: fuelValues.volume || 0,
+      rechargeAmount: Number(contextValues.rechargeAmount || 0),
       availableCoupons,
       selectedCouponIds
     };
@@ -583,9 +745,10 @@ export default function CheckoutPage() {
     setCartItems([]);
     setMode("shop");
     fuelForm.setFieldsValue(fuel());
-    customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "member-001" });
+    customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "demo-member-002" });
     contextForm.setFieldsValue(defaultContext());
     resetCalculation();
+    setLoadedDemoKey(undefined);
     barcodeInputRef.current?.focus();
   }
 
@@ -628,7 +791,7 @@ export default function CheckoutPage() {
                   type="primary"
                   icon={<ThunderboltOutlined />}
                   loading={checkoutMutation.isPending}
-                  disabled={cartItems.length === 0}
+                  disabled={!hasTransactionInput}
                   onClick={calculate}
                 >
                   一键计算促销
@@ -720,14 +883,27 @@ export default function CheckoutPage() {
               items={[
                 {
                   key: "quick-check",
-                  label: "快速验证样例",
+                  label: "活动看板逐项验收（真实商品与规则）",
                   children: (
-                    <div className="demo-actions">
-                      {demoCases.map((demo) => (
-                        <Button key={demo.key} onClick={() => loadDemo(demo)}>
-                          {demo.label}
-                        </Button>
-                      ))}
+                    <div className="activity-demo-picker">
+                      <Select
+                        className="full-width"
+                        value={loadedDemoKey}
+                        placeholder="选择一个活动，自动载入商品、日期和业务条件"
+                        options={demoCases.map((demo) => ({ value: demo.key, label: demo.label }))}
+                        onChange={(key) => {
+                          const demo = demoCases.find((item) => item.key === key);
+                          if (demo) loadDemo(demo);
+                        }}
+                      />
+                      {activeDemo ? (
+                        <Alert
+                          type="info"
+                          showIcon
+                          message={activeDemo.label}
+                          description={`${activeDemo.description} 已载入，点击右上角“一键计算促销”验收。`}
+                        />
+                      ) : null}
                     </div>
                   )
                 },
@@ -819,7 +995,7 @@ export default function CheckoutPage() {
               <Form<CustomerForm>
                 form={customerForm}
                 layout="vertical"
-                initialValues={{ member: true, memberLevel: "gold", memberCode: "member-001" }}
+                initialValues={{ member: true, memberLevel: "gold", memberCode: "demo-member-002" }}
               >
                 <Space size={10} align="start" wrap>
                   <Form.Item name="member" valuePropName="checked" label="会员">
@@ -856,11 +1032,25 @@ export default function CheckoutPage() {
               items={[
                 {
                   key: "advanced",
-                  label: "站点、优惠券和油品牌号",
+                  label: "验收日期、站点、充值与优惠券",
                   forceRender: true,
                   children: (
                     <Form<TransactionContextForm> form={contextForm} layout="vertical" initialValues={defaultContext()}>
                       <div className="compact-field-grid context-fields">
+                        <Form.Item label="验收日期" name="businessDate">
+                          <Input type="date" />
+                        </Form.Item>
+                        <Form.Item label="验收时间" name="businessTime">
+                          <Input type="time" step={1} />
+                        </Form.Item>
+                        <Form.Item label="当前站点" name="stationCode">
+                          <Select
+                            showSearch
+                            loading={stationsQuery.isLoading}
+                            options={stationOptions}
+                            optionFilterProp="label"
+                          />
+                        </Form.Item>
                         <Form.Item label="站点类型" name="stationType">
                           <Select options={stationTypeOptions} />
                         </Form.Item>
@@ -874,6 +1064,18 @@ export default function CheckoutPage() {
                               value: index + 1,
                               label: `${index + 1}月`
                             }))}
+                          />
+                        </Form.Item>
+                        <Form.Item label="充值金额" name="rechargeAmount">
+                          <InputNumber min={0} precision={2} className="full-width" />
+                        </Form.Item>
+                        <Form.Item label="支付方式" name="paymentMethod">
+                          <Select
+                            options={[
+                              { value: "E_ENJOY_CARD", label: "昆仑 e 享卡" },
+                              { value: "CASH", label: "现金" },
+                              { value: "OTHER", label: "其他" }
+                            ]}
                           />
                         </Form.Item>
                         <Form.Item label="券 ID" name="couponId">
@@ -944,11 +1146,11 @@ export default function CheckoutPage() {
                 </div>
                 <div>
                   <span>当前金额</span>
-                  <Price amount={cartTotal} size="medium" />
+                  <Price amount={transactionInputTotal} size="medium" />
                 </div>
                 <div>
                   <span>下一步</span>
-                  <strong>{cartItems.length ? "一键计算促销" : "扫码加入商品"}</strong>
+                  <strong>{hasTransactionInput ? "一键计算促销" : "扫码加入商品"}</strong>
                 </div>
               </div>
             </section>
@@ -956,17 +1158,18 @@ export default function CheckoutPage() {
 
           {result ? (
             <>
+              {activeDemo ? <ScenarioAcceptance demo={activeDemo} result={result} /> : null}
               <PromotionOutcome result={result} recommended={recommended} />
 
               <section className="panel">
                 <Typography.Title level={3} className="section-title">
                   可用促销方案
                 </Typography.Title>
-                {result.availableCandidates.length === 0 ? (
+                {promotionCandidates.length === 0 ? (
                   <EmptyState description="没有可用促销" />
                 ) : (
                   <div className="candidate-list">
-                    {result.availableCandidates.map((candidate) => (
+                    {promotionCandidates.map((candidate) => (
                       <CandidateCard
                         key={candidate.candidateId}
                         candidate={candidate}
@@ -1059,7 +1262,7 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
   const saved = toNumber(result.discountAmount);
   const original = toNumber(result.originalAmount);
   const savedRate = original > 0 ? Math.round((saved / original) * 100) : 0;
-  const hasPromotion = Boolean(recommended) && saved > 0;
+  const hasPromotion = Boolean(recommended && recommended.ruleType !== "ORIGINAL_PRICE");
   const warnings = result.warnings.length + result.inventoryWarnings.length;
 
   return (
@@ -1083,14 +1286,14 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
         </div>
         <div className="payable-saving">
           <span>本单优惠</span>
-          <strong>省 {formatMoney(saved)}</strong>
-          <small>{savedRate > 0 ? `约 ${savedRate}%` : "无优惠"}</small>
+          <strong>{saved > 0 ? `省 ${formatMoney(saved)}` : "赠品/赠券权益"}</strong>
+          <small>{savedRate > 0 ? `约 ${savedRate}%` : hasPromotion ? "本单已命中活动" : "无优惠"}</small>
         </div>
       </div>
 
       <div className="feedback-grid">
         <FeedbackTile label="原价" value={<Price amount={result.originalAmount} size="medium" variant="muted" strike={saved > 0} />} />
-        <FeedbackTile label="可选活动" value={`${result.availableCandidates.length} 个`} />
+        <FeedbackTile label="可选活动" value={`${uniquePromotionCandidates(result.availableCandidates).length} 个`} />
         <FeedbackTile label="不可用活动" value={`${result.blockedPromotions.length} 个`} tone={result.blockedPromotions.length ? "warning" : "normal"} />
         <FeedbackTile label="库存/系统提醒" value={`${warnings} 条`} tone={warnings ? "warning" : "normal"} />
       </div>
@@ -1099,7 +1302,9 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
         <GiftOutlined />
         <span>
           {hasPromotion
-            ? `已为顾客选择“${recommended?.title}”，少付 ${formatMoney(saved)}。`
+            ? saved > 0
+              ? `已为顾客选择“${recommended?.title}”，少付 ${formatMoney(saved)}。`
+              : `已为顾客命中“${recommended?.title}”，请核对赠品、赠券和积分权益。`
             : "本单没有产生优惠，可按原价继续收款。"}
         </span>
       </div>
@@ -1109,9 +1314,36 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
           {renderGifts(recommended.gifts)}
           {renderCoupons(recommended.coupons)}
           {recommended.consumedCouponIds.length > 0 ? <Tag color="purple">核销券 {recommended.consumedCouponIds.join(", ")}</Tag> : null}
+          {recommended.pointsMultiplier > 1 ? <Tag color="cyan">积分 x {recommended.pointsMultiplier}</Tag> : null}
         </div>
       ) : null}
+      {result.pointsPreview ? (
+        <Alert
+          type="success"
+          showIcon
+          message={`${result.pointsPreview.activityName}：${result.pointsPreview.multiplier} 倍积分`}
+          description={`确认收款后预计增加 ${result.pointsPreview.estimatedPoints} 积分。`}
+        />
+      ) : null}
     </section>
+  );
+}
+
+function ScenarioAcceptance({ demo, result }: { demo: DemoCase; result: CheckoutCalculateResponse }) {
+  const hitRuleIds = new Set(result.availableCandidates.map((candidate) => candidate.ruleId));
+  const missing = demo.expectedRuleIds.filter((ruleId) => !hitRuleIds.has(ruleId));
+  return (
+    <Alert
+      className="scenario-acceptance"
+      type={missing.length === 0 ? "success" : "warning"}
+      showIcon
+      message={missing.length === 0 ? `验收通过：${demo.label}` : `请复核：${demo.label}`}
+      description={
+        missing.length === 0
+          ? `已命中 ${demo.expectedRuleIds.length} 条目标规则：${demo.expectedRuleIds.join("、")}`
+          : `未命中目标规则：${missing.join("、")}`
+      }
+    />
   );
 }
 
@@ -1192,6 +1424,7 @@ function CandidateCard({
         <Space wrap>
           {renderGifts(candidate.gifts)}
           {renderCoupons(candidate.coupons)}
+          {candidate.pointsMultiplier > 1 ? <Tag color="cyan">积分 x {candidate.pointsMultiplier}</Tag> : null}
         </Space>
         {candidate.consumedCouponIds.length > 0 ? (
           <Typography.Text type="secondary">核销券：{candidate.consumedCouponIds.join(", ")}</Typography.Text>
@@ -1335,7 +1568,14 @@ function ExchangeOfferPanel({
   );
 }
 
-function item(productCode: string, name: string, quantity: number, unitPrice: number, category: string): CartItem {
+function item(
+  productCode: string,
+  name: string,
+  quantity: number,
+  unitPrice: number,
+  category: string,
+  inventoryQuantity = 20
+): CartItem {
   return {
     lineId: `line-${productCode}`,
     productCode,
@@ -1344,7 +1584,7 @@ function item(productCode: string, name: string, quantity: number, unitPrice: nu
     quantity,
     unitPrice,
     category,
-    inventoryQuantity: 20
+    inventoryQuantity
   };
 }
 
@@ -1353,9 +1593,15 @@ function fuel(fuelType: FuelType = "NONE", fuelGrade = "", amount = 0, volume = 
 }
 
 function defaultContext(): TransactionContextForm {
+  const current = currentBusinessTime();
   return {
+    stationCode: "1-A6501-C001-S001",
     stationType: "gas_station",
     stationProvince: "新疆",
+    businessDate: current.businessDate,
+    businessTime: current.businessTime,
+    rechargeAmount: 0,
+    paymentMethod: "E_ENJOY_CARD",
     memberBirthMonth: 7,
     couponStackable: false
   };
@@ -1395,7 +1641,7 @@ function buildAvailableCoupons(values: TransactionContextForm): Coupon[] {
       excludedCategories: splitCsv(values.couponExcludedCategories),
       applicableProductCodes: [],
       excludedProductCodes: [],
-      validFrom: currentBusinessTime().businessDate,
+      validFrom: values.businessDate || currentBusinessTime().businessDate,
       validUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
       memberOnly: false,
       stackable: Boolean(values.couponStackable),
@@ -1435,6 +1681,31 @@ function currentBusinessTime() {
     businessDate: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`,
     businessTime: `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
   };
+}
+
+function normalizeBusinessTime(value: string) {
+  return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
+}
+
+function uniquePromotionCandidates(candidates: Candidate[]) {
+  const unique = new Map<string, Candidate>();
+  candidates
+    .filter((candidate) => candidate.ruleType !== "ORIGINAL_PRICE")
+    .forEach((candidate) => {
+      const signature = JSON.stringify({
+        ruleType: candidate.ruleType,
+        payableAmount: toNumber(candidate.payableAmount),
+        discountAmount: toNumber(candidate.discountAmount),
+        gifts: candidate.gifts,
+        coupons: candidate.coupons,
+        compositeComponents: candidate.compositeComponents || [],
+        pointsMultiplier: candidate.pointsMultiplier
+      });
+      if (!unique.has(signature)) {
+        unique.set(signature, candidate);
+      }
+    });
+  return Array.from(unique.values());
 }
 
 function lineTotal(record: CartItem) {

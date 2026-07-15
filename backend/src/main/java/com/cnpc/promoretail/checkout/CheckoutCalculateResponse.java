@@ -25,10 +25,19 @@ public record CheckoutCalculateResponse(
         String ruleVersion,
         List<String> ruleVersionIds,
         List<InventoryWarning> inventoryWarnings,
+        PointsPreview pointsPreview,
         CandidateResponse originalPriceFallback
 ) {
 
     public static CheckoutCalculateResponse from(String calculationId, CalculationResult result) {
+        return from(calculationId, result, null);
+    }
+
+    public static CheckoutCalculateResponse from(
+            String calculationId,
+            CalculationResult result,
+            PointsPreview pointsPreview
+    ) {
         return new CheckoutCalculateResponse(
                 calculationId,
                 result.originalAmount(),
@@ -42,8 +51,18 @@ public record CheckoutCalculateResponse(
                 result.ruleVersion(),
                 result.ruleVersionIds(),
                 result.inventoryWarnings(),
+                pointsPreview,
                 CandidateResponse.from(result.originalPriceFallback())
         );
+    }
+
+    public record PointsPreview(
+            String activityId,
+            String ruleId,
+            String activityName,
+            BigDecimal multiplier,
+            long estimatedPoints
+    ) {
     }
 
     public record CandidateResponse(

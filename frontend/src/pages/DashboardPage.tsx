@@ -230,8 +230,16 @@ export default function DashboardPage() {
 
 function buildActivityRows(drafts: PromotionRuleDraft[]): ActivityRow[] {
   const groups = new Map<string, ActivityRow>();
+  const seenRules = new Set<string>();
   drafts.forEach((draft) => {
     const key = activityKey(draft);
+    const semanticRuleKey = key === "g3-99-zone"
+      ? `${key}:${[...(draft.rule.condition.productCodes || [])].sort().join(",")}`
+      : draft.rule.ruleId;
+    if (seenRules.has(semanticRuleKey)) {
+      return;
+    }
+    seenRules.add(semanticRuleKey);
     const current = groups.get(key) || {
       key,
       name: activityName(draft),
@@ -271,7 +279,7 @@ function activityKey(draft: PromotionRuleDraft) {
   const source = draft.sourceImportId || "";
   if (ruleId.startsWith("audit-personalized-fixed-") || source.includes("g7")) return "g7-single-item";
   if (ruleId.includes("bundle-abv2") || ruleId.includes("abv2-h2") || source.includes("exchange-purchase")) return "fuel-exchange";
-  if (ruleId.startsWith("fixed-") || source.includes("99-zone")) return "g3-99-zone";
+  if (ruleId.startsWith("fixed-") || ruleId.startsWith("abv2-99-zone-") || ruleId.startsWith("import-fixed-9_9-") || source.includes("99-zone")) return "g3-99-zone";
   if (ruleId.startsWith("abv2-a5") || source.includes("a5-recharge")) return "a5-day10-recharge";
   if (source.includes("small-recharge")) return "a6-small-recharge";
   if (ruleId.startsWith("abv2-g6")) return "g6-personalized";
@@ -298,7 +306,7 @@ function activityName(draft: PromotionRuleDraft) {
     "storewide-days": "逢 7/9/加气站折扣",
     "a4-cn98": "CN98 加油优惠",
     "e2-case-coupon": "整箱购赠券",
-    "fuel-gift": "油品消费赠品"
+    "fuel-gift": "燃气/油品消费赠券赠品"
   };
   return labels[key] || draft.sourceImportId || draft.sourceSheetName || draft.rule.activityName || "其他活动";
 }

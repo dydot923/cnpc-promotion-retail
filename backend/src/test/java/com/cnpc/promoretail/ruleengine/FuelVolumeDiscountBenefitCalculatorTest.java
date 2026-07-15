@@ -92,9 +92,8 @@ class FuelVolumeDiscountBenefitCalculatorTest {
         return new OrderContext(
                 new StationContext("station-001", "gas_station", "新疆"),
                 new CustomerContext(true, "gold", List.of(), 7),
-                new FuelContext(fuelType, "CN98", BigDecimal.ZERO, new BigDecimal(volume)),
-                List.of(new CartItem("line-1", "sku-1", "barcode-1", "便利店商品", 1,
-                        new BigDecimal("100.00"), "便利店", new BigDecimal("20"))),
+                new FuelContext(fuelType, "CN98", new BigDecimal("100.00"), new BigDecimal(volume)),
+                List.of(),
                 date,
                 LocalTime.of(10, 0)
         );

@@ -119,7 +119,7 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
 
         CalculationResult driving = calculateBundle(drivingRule, FuelType.GASOLINE, "200.00");
         CalculationResult water = calculateBundle(waterRule, FuelType.GASOLINE, "200.00");
-        assertThat(candidate(driving, drivingRule.ruleId()).payableAmount()).isEqualByComparingTo("25.00");
+        assertThat(candidate(driving, drivingRule.ruleId()).payableAmount()).isEqualByComparingTo("225.00");
         assertThat(candidatesByRule(water, waterRule.ruleId())).isEmpty();
         assertThat(blockedReasons(water, waterRule.ruleId()))
                 .anyMatch(reason -> reason.contains("库存不足") && reason.contains("70655834"));
@@ -135,7 +135,7 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
             assertThat(blockedReasons(longHaul, longHaulRule.ruleId()))
                     .anyMatch(reason -> reason.contains("库存不足"));
         } else {
-            assertThat(candidate(longHaul, longHaulRule.ruleId()).payableAmount()).isEqualByComparingTo("25.00");
+            assertThat(candidate(longHaul, longHaulRule.ruleId()).payableAmount()).isEqualByComparingTo("525.00");
         }
     }
 

@@ -101,7 +101,38 @@ public class CheckoutApplicationService {
                 result.ruleVersionIds(),
                 Instant.now()
         ));
-        return CheckoutCalculateResponse.from(calculationId, result);
+        CheckoutCalculateResponse.PointsPreview pointsPreview = pointsPreview(orderContext, result);
+        return CheckoutCalculateResponse.from(calculationId, result, pointsPreview);
+    }
+
+    private CheckoutCalculateResponse.PointsPreview pointsPreview(
+            OrderContext orderContext,
+            CalculationResult result
+    ) {
+        PointsActivity activity = bestPointsActivity(orderContext).orElse(null);
+        if (activity == null) {
+            return null;
+        }
+        PromotionCandidate recommended = result.availableCandidates().stream()
+                .filter(candidate -> candidate.candidateId().equals(result.recommendedCandidateId()))
+                .findFirst()
+                .orElse(result.originalPriceFallback());
+        BigDecimal multiplier = memberRepository.findLevelByCode(orderContext.customer().memberLevel())
+                .map(level -> level.pointsMultiplier())
+                .orElse(BigDecimal.ONE);
+        multiplier = max(multiplier, BigDecimal.valueOf(recommended.pointsMultiplier()));
+        multiplier = max(multiplier, activity.pointsMultiplier());
+        long estimatedPoints = pointsBasis(orderContext, recommended, activity)
+                .multiply(multiplier)
+                .setScale(0, RoundingMode.DOWN)
+                .longValue();
+        return new CheckoutCalculateResponse.PointsPreview(
+                activity.activityId(),
+                activity.ruleId(),
+                activity.activityName(),
+                multiplier,
+                Math.max(estimatedPoints, 0)
+        );
     }
 
     @Transactional

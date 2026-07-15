@@ -254,6 +254,12 @@ class CheckoutApplicationServiceTest {
         CheckoutCalculateResponse calculation = checkoutApplicationService.calculate(new CheckoutCalculateRequest(
                 fuelOrder(FuelType.LNG, new BigDecimal("500.00"), LocalDate.of(2026, 7, 17))));
 
+        assertThat(calculation.originalAmount()).isEqualByComparingTo("500.00");
+        assertThat(calculation.pointsPreview()).isNotNull();
+        assertThat(calculation.pointsPreview().activityId()).isEqualTo("points-day7-gas");
+        assertThat(calculation.pointsPreview().multiplier()).isEqualByComparingTo("3.0000");
+        assertThat(calculation.pointsPreview().estimatedPoints()).isEqualTo(1500);
+
         checkoutApplicationService.confirm(new CheckoutConfirmRequest(
                 "order-day7-gas-points",
                 calculation.calculationId(),
