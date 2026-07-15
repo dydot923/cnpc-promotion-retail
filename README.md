@@ -2,6 +2,17 @@
 
 当前阶段以后端促销规则引擎、Excel 导入、规则治理和 checkout 计算闭环为核心。
 
+## 项目结构
+
+当前项目按后端、前端、业务数据和文档分层：
+
+- `backend/`：Java 21 / Spring Boot 3 后端服务，促销计算、导入、规则治理、收银、库存和补货逻辑集中在这里。
+- `frontend/`：React 18 / TypeScript / Vite 前端，负责收银、规则确认、导入异常、库存预警、补货清单和审计日志页面。
+- `data/`：原始 Excel 业务数据源，只读使用。
+- `docs/`：需求、架构、设计、测试、演示和导入记录。
+
+完整结构说明见 `docs/project-structure.md`。
+
 ## 默认启动
 
 默认 profile 不依赖数据库，会使用内存版规则仓库和计算记录仓库。
@@ -45,6 +56,88 @@ mvn -DskipTests spring-boot:stop
 - 确认 `draft-import-fixed-9_9-70424725` 后，写入 `promotion_rule_version` 和 `promotion_rule_audit_log`，checkout 可从 PostgreSQL 加载 confirmed fixed_price 规则并返回 `ruleVersionIds`。
 - 停用 `import-fixed-9_9-70424725` 后，当前 draft 状态变为 `DISABLED`，checkout 不再加载该规则并回到原价兜底。
 
+## checkout API 契约
+
+`POST /api/checkout/calculate` 返回 `ApiResponse<CheckoutCalculateResponse>`。前端只消费结果，不做促销判断。
+
+核心字段：
+
+- `calculationId`
+- `originalAmount`
+- `payableAmount`
+- `discountAmount`
+- `recommendedCandidateId`
+- `availableCandidates`
+- `blockedPromotions`
+- `warnings`
+- `explanations`
+- `ruleVersion`
+- `ruleVersionIds`
+- `inventoryWarnings`
+- `originalPriceFallback`
+
+`availableCandidates[]` 字段：
+
+- `candidateId`
+- `ruleId`
+- `title`
+- `ruleType`
+- `status`
+- `originalAmount`
+- `payableAmount`
+- `discountAmount`
+- `gifts`
+- `coupons`
+- `explanation`
+- `ruleVersionId`
+- `stackable`
+- `exclusiveGroup`
+
+`blockedPromotions[]` 字段：
+
+- `ruleId`
+- `ruleType`
+- `title`
+- `blockedReasons`
+- `ruleVersionId`
+
+## 商品、库存与补货接口
+
+商品查询：
+
+- `GET /api/products/search?keyword=`
+- `GET /api/products/by-barcode/{barcode}`
+- `GET /api/products/{productCode}`
+
+返回字段：
+
+- `productCode`
+- `barcode`
+- `productName`
+- `category`
+- `unitPrice`
+- `inventoryQuantity`
+
+库存预警：
+
+- `GET /api/inventory/alerts`
+
+第一版只覆盖 `CONFIRMED` 促销规则涉及的商品、赠品、组合包商品和换购商品。默认安全库存为 `10`，当前库存 `< 10` 返回 `LOW`，`< 5` 返回 `CRITICAL`，`= 0` 返回 `OUT_OF_STOCK`，活动商品本站无库存记录返回 `NO_STATION_STOCK`。组合包会计算可组装套数，并返回限制商品原因。
+
+补货清单：
+
+- `POST /api/replenishment/lists`
+- `GET /api/replenishment/lists/{id}`
+- `GET /api/replenishment/lists/{id}/export`
+
+建议补货量第一版为：
+
+```text
+suggestedQuantity = max(threshold * 2 - currentQuantity, 0)
+```
+
+导出格式为 UTF-8 CSV。
+
 ## 持久化测试
 
 项目包含 Testcontainers/Flyway 迁移测试。当前 Windows + Docker Desktop 环境中，Testcontainers 会识别到 `docker_cli` named pipe，但 Java Docker client 对该 named pipe 返回兼容性错误，因此 `FlywayMigrationTest` 会跳过；这不影响普通 `mvn test`，也不影响上面的 Docker Compose PostgreSQL 真实库验证路径。
@@ -52,6 +145,22 @@ mvn -DskipTests spring-boot:stop
 ```powershell
 cd backend
 mvn test
+```
+
+## 前端 npm audit
+
+当前 `npm audit` 仍报告 2 个开发工具链风险：
+
+- `vite`：direct high；
+- `esbuild`：transitive moderate via Vite。
+
+可用自动修复需要升级到 `vite@8.1.3`，属于 semver major。本阶段未使用 `npm audit fix --force`，建议单独分支验证 Vite 大版本升级，并至少运行：
+
+```powershell
+cd frontend
+npm install
+npm test
+npm run build
 ```
 
 ## 数据文件约束

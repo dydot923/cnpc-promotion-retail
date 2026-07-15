@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: cnpc-promotion-postgres
     environment:
-      POSTGRES_DB: cnpc_promotion
-      POSTGRES_USER: cnpc
-      POSTGRES_PASSWORD: cnpc
+      POSTGRES_DB: ${POSTGRES_DB:-cnpc_promotion}
+      POSTGRES_USER: ${POSTGRES_USER:-cnpc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cnpc}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - cnpc_promotion_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cnpc -d cnpc_promotion"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cnpc} -d ${POSTGRES_DB:-cnpc_promotion}"]
       interval: 10s
       timeout: 5s
       retries: 5
