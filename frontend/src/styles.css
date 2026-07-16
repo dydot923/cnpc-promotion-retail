@@ -564,6 +564,10 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 12px;
+  max-height: 420px;
+  padding-right: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .product-result-summary {
@@ -601,7 +605,7 @@ body {
   background: #e8f0fa;
 }
 
-.product-result-button span {
+.product-result-info {
   min-width: 0;
   display: grid;
   gap: 2px;
@@ -618,11 +622,22 @@ body {
   color: #66788a;
 }
 
+.product-result-side {
+  min-width: 108px;
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+
+.product-result-side small {
+  white-space: nowrap;
+}
+
 .mode-actions {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .mode-button {
@@ -634,6 +649,33 @@ body {
   color: #ffffff !important;
   border-color: #003f88 !important;
   background: #003f88 !important;
+}
+
+.mode-context {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border-left: 3px solid #003f88;
+  background: #f5f7fa;
+  color: #66788a;
+  font-size: 13px;
+}
+
+.mode-context strong {
+  flex: 0 0 auto;
+  color: #003f88;
+}
+
+.blocked-promotion-search {
+  margin-bottom: 10px;
+}
+
+.show-more-promotions {
+  width: 100%;
+  margin-top: 10px;
 }
 
 .demo-actions {
@@ -1092,6 +1134,10 @@ body {
   .exchange-offer-list,
   .product-result-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mode-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

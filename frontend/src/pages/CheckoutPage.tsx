@@ -1,4 +1,5 @@
 import {
+  CarOutlined,
   CheckCircleOutlined,
   DeleteOutlined,
   GiftOutlined,
@@ -6,7 +7,10 @@ import {
   PrinterOutlined,
   ReloadOutlined,
   SearchOutlined,
+  ShopOutlined,
   ShoppingCartOutlined,
+  SwapOutlined,
+  TagsOutlined,
   ThunderboltOutlined,
   WarningOutlined
 } from "@ant-design/icons";
@@ -93,7 +97,7 @@ type TransactionContextForm = {
   selectedCouponIds?: string;
 };
 
-type CheckoutMode = "shop" | "fuel" | "coupon";
+type CheckoutMode = "shop" | "fuel" | "exchange" | "coupon";
 
 type ProductLookupResult = {
   query: string;
@@ -688,11 +692,15 @@ export default function CheckoutPage() {
         stationType: watchedStationType || "gas_station",
         stationProvince: watchedStationProvince || "新疆"
       }),
-    enabled: mode === "fuel" && Boolean(watchedFuelType && watchedFuelType !== "NONE"),
+    enabled: mode === "exchange" && Boolean(watchedFuelType && watchedFuelType !== "NONE"),
     staleTime: 10_000
   });
 
   const result = checkoutMutation.data;
+  const productResults = useMemo(
+    () => sortProductResults(productLookupMutation.data?.products || [], productLookupMutation.data?.query || ""),
+    [productLookupMutation.data]
+  );
   const activeDemo = useMemo(() => demoCases.find((demo) => demo.key === loadedDemoKey), [loadedDemoKey]);
   const promotionCandidates = useMemo(
     () => uniquePromotionCandidates(result?.availableCandidates || []),
@@ -806,7 +814,7 @@ export default function CheckoutPage() {
       memberBirthMonth: demo.customer.member ? 7 : undefined,
       ...(demo.context || {})
     });
-    setMode(demo.fuel.fuelType === "NONE" ? "shop" : "fuel");
+    setMode(demo.key.startsWith("h") ? "exchange" : demo.fuel.fuelType === "NONE" ? "shop" : "fuel");
     resetCalculation();
     barcodeInputRef.current?.focus();
   }
@@ -814,29 +822,11 @@ export default function CheckoutPage() {
   function applyMode(nextMode: CheckoutMode) {
     setLoadedDemoKey(undefined);
     setMode(nextMode);
-    if (nextMode === "shop") {
-      fuelForm.setFieldsValue(fuel());
-      contextForm.setFieldsValue({
-        couponId: undefined,
-        couponName: undefined,
-        couponFaceValue: undefined,
-        couponMinSpendAmount: undefined,
-        selectedCouponIds: undefined
-      });
-    }
-    if (nextMode === "fuel") {
-      fuelForm.setFieldsValue(fuel("GASOLINE", "92", 200, 0));
+    if ((nextMode === "fuel" || nextMode === "exchange") && fuelForm.getFieldValue("fuelType") === "NONE") {
+      fuelForm.setFieldsValue(fuel("GASOLINE", "92", 0, 0));
     }
     if (nextMode === "coupon") {
       customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "demo-member-002" });
-      contextForm.setFieldsValue({
-        couponId: "coupon-demo-001",
-        couponName: "会员抵扣券",
-        couponFaceValue: 10,
-        couponMinSpendAmount: 30,
-        selectedCouponIds: "coupon-demo-001",
-        couponStackable: false
-      });
     }
     resetCalculation();
     barcodeInputRef.current?.focus();
@@ -1131,23 +1121,26 @@ export default function CheckoutPage() {
               />
             ) : null}
 
-            {productLookupMutation.data?.products.length && !productLookupMutation.data.selected ? (
+            {productResults.length > 0 && !productLookupMutation.data?.selected ? (
               <>
                 <div className="product-result-summary">
-                  <span>找到 {productLookupMutation.data.products.length} 个商品</span>
-                  <span>选择一项加入，或继续输入缩小范围</span>
+                  <span>找到 {productResults.length} 个商品，已全部显示</span>
+                  <span>有库存商品优先，可滚动查看全部结果</span>
                 </div>
                 <div className="product-result-list">
-                  {productLookupMutation.data.products.slice(0, 8).map((product) => (
+                  {productResults.map((product) => (
                     <button key={product.productCode} className="product-result-button" type="button" onClick={() => selectProduct(product)}>
-                      <span>
+                      <span className="product-result-info">
                         <strong>{product.productName}</strong>
                         <small>
                           编码 {product.productCode}
                           {product.barcode ? ` / 条码 ${product.barcode}` : ""}
                         </small>
                       </span>
-                      <Price amount={product.unitPrice} size="small" />
+                      <span className="product-result-side">
+                        <Price amount={product.unitPrice} size="small" />
+                        <small>{product.category || "未分类"} / 库存 {Number(product.inventoryQuantity || 0)}</small>
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -1155,18 +1148,23 @@ export default function CheckoutPage() {
             ) : null}
 
             <div className="mode-actions">
-              <Button className={mode === "shop" ? "mode-button active" : "mode-button"} onClick={() => applyMode("shop")}>
-                便利店
+              <Button icon={<ShopOutlined />} className={mode === "shop" ? "mode-button active" : "mode-button"} onClick={() => applyMode("shop")}>
+                便利店商品
               </Button>
-              <Button className={mode === "fuel" ? "mode-button active" : "mode-button"} onClick={() => applyMode("fuel")}>
+              <Button icon={<CarOutlined />} className={mode === "fuel" ? "mode-button active" : "mode-button"} onClick={() => applyMode("fuel")}>
+                加油站
+              </Button>
+              <Button icon={<SwapOutlined />} className={mode === "exchange" ? "mode-button active" : "mode-button"} onClick={() => applyMode("exchange")}>
                 加油换购
               </Button>
-              <Button className={mode === "coupon" ? "mode-button active" : "mode-button"} onClick={() => applyMode("coupon")}>
+              <Button icon={<TagsOutlined />} className={mode === "coupon" ? "mode-button active" : "mode-button"} onClick={() => applyMode("coupon")}>
                 用券结算
               </Button>
             </div>
 
-            {mode === "fuel" ? (
+            <ModeContext mode={mode} />
+
+            {mode === "exchange" ? (
               <ExchangeOfferPanel
                 offers={exchangeOffersQuery.data || []}
                 loading={exchangeOffersQuery.isLoading || exchangeOffersQuery.isFetching}
@@ -1766,22 +1764,67 @@ function CandidateCard({
 
 function PromotionProblems({ result }: { result: CheckoutCalculateResponse }) {
   const hasWarnings = result.warnings.length > 0 || result.inventoryWarnings.length > 0;
+  const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(12);
+  const filteredPromotions = useMemo(() => {
+    const keyword = query.trim().toLocaleLowerCase();
+    if (!keyword) {
+      return result.blockedPromotions;
+    }
+    return result.blockedPromotions.filter((promotion) =>
+      promotion.title.toLocaleLowerCase().includes(keyword)
+      || promotion.ruleId.toLocaleLowerCase().includes(keyword)
+      || promotion.blockedReasons.some((reason) => reason.message.toLocaleLowerCase().includes(keyword))
+    );
+  }, [query, result.blockedPromotions]);
+  const visiblePromotions = filteredPromotions.slice(0, visibleCount);
+
+  useEffect(() => {
+    setQuery("");
+    setVisibleCount(12);
+  }, [result.calculationId]);
 
   return (
     <section className="panel">
-      <Typography.Title level={3} className="section-title">
-        不可用促销
-      </Typography.Title>
+      <Space className="panel-toolbar" align="center">
+        <div>
+          <Typography.Title level={3} className="section-title">未命中活动</Typography.Title>
+          <Typography.Text type="secondary">搜索活动名称，查看具体未满足条件</Typography.Text>
+        </div>
+        <Tag>{result.blockedPromotions.length} 条</Tag>
+      </Space>
       {result.blockedPromotions.length === 0 ? (
-        <EmptyState description="没有不可用促销" />
+        <EmptyState description="没有未命中活动" />
       ) : (
-        <Collapse
-          items={result.blockedPromotions.slice(0, 8).map((promotion) => ({
-            key: `${promotion.ruleId}-${promotion.ruleVersionId || "unversioned"}`,
-            label: `${promotion.title} / ${ruleTypeLabel(promotion.ruleType)}`,
-            children: <BlockedReasons promotion={promotion} />
-          }))}
-        />
+        <>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            value={query}
+            placeholder="搜索活动名称、规则编号或未满足条件"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setVisibleCount(12);
+            }}
+            className="blocked-promotion-search"
+          />
+          {visiblePromotions.length === 0 ? (
+            <EmptyState description="没有匹配的活动" />
+          ) : (
+            <Collapse
+              items={visiblePromotions.map((promotion) => ({
+                key: `${promotion.ruleId}-${promotion.ruleVersionId || "unversioned"}`,
+                label: `${promotion.title} / ${ruleTypeLabel(promotion.ruleType)}`,
+                children: <BlockedReasons promotion={promotion} />
+              }))}
+            />
+          )}
+          {visiblePromotions.length < filteredPromotions.length ? (
+            <Button className="show-more-promotions" onClick={() => setVisibleCount((count) => count + 20)}>
+              显示更多（剩余 {filteredPromotions.length - visiblePromotions.length} 条）
+            </Button>
+          ) : null}
+        </>
       )}
       {hasWarnings ? (
         <>
@@ -1823,6 +1866,21 @@ function StepPill({ index, title, active, done }: { index: number; title: string
     <div className={`step-pill${active ? " active" : ""}${done ? " done" : ""}`}>
       <span>{done ? <CheckCircleOutlined /> : index}</span>
       <strong>{title}</strong>
+    </div>
+  );
+}
+
+function ModeContext({ mode }: { mode: CheckoutMode }) {
+  const content: Record<CheckoutMode, { title: string; detail: string }> = {
+    shop: { title: "便利店商品", detail: "扫码或搜索商品，计算满减、固定价、赠品与赠券" },
+    fuel: { title: "加油站", detail: "在业务信息中录入油品类型、金额和升数" },
+    exchange: { title: "加油换购", detail: "录入油品金额后，从可换购商品中选择符合条件的商品" },
+    coupon: { title: "用券结算", detail: "录入会员和优惠券信息，系统自动核对可用范围与叠加条件" }
+  };
+  return (
+    <div className="mode-context">
+      <strong>{content[mode].title}</strong>
+      <span>{content[mode].detail}</span>
     </div>
   );
 }
@@ -2040,6 +2098,25 @@ function uniquePromotionCandidates(candidates: Candidate[]) {
 
 function lineTotal(record: CartItem) {
   return Number(record.unitPrice || 0) * Number(record.quantity || 0);
+}
+
+function sortProductResults(products: ProductCatalogItem[], query: string): ProductCatalogItem[] {
+  const keyword = query.trim().toLocaleLowerCase();
+  return [...products].sort((left, right) => {
+    const leftStocked = Number(left.inventoryQuantity || 0) > 0 ? 0 : 1;
+    const rightStocked = Number(right.inventoryQuantity || 0) > 0 ? 0 : 1;
+    if (leftStocked !== rightStocked) {
+      return leftStocked - rightStocked;
+    }
+    const leftName = left.productName.toLocaleLowerCase();
+    const rightName = right.productName.toLocaleLowerCase();
+    const leftPrefix = keyword && leftName.startsWith(keyword) ? 0 : 1;
+    const rightPrefix = keyword && rightName.startsWith(keyword) ? 0 : 1;
+    if (leftPrefix !== rightPrefix) {
+      return leftPrefix - rightPrefix;
+    }
+    return left.productCode.localeCompare(right.productCode);
+  });
 }
 
 function sumCart(items: CartItem[]) {

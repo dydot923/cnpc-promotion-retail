@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-const frontendBaseUrl = process.env.FRONTEND_BASE_URL || "http://localhost:5173";
+const frontendBaseUrl = process.env.FRONTEND_BASE_URL || "http://localhost:5174";
 const requireFrontendSmoke = process.env.REQUIRE_FRONTEND_SMOKE === "true";
 
 const requiredCheckoutLabels = [
@@ -19,7 +19,7 @@ const requiredCheckoutLabels = [
   "验收日期",
   "充值金额",
   "可用促销方案",
-  "不可用促销",
+  "未命中活动",
   "原价兜底",
   "审计追踪",
   "查询并加入"
@@ -72,6 +72,10 @@ async function main() {
   assert(files.checkout.includes("calculateCheckout"), "CheckoutPage must call checkout API wrapper");
   assert(files.checkout.includes("confirmCheckout"), "CheckoutPage must call confirmation API wrapper");
   assert(files.checkout.includes("fetchProductByBarcode"), "CheckoutPage barcode lookup missing");
+  assert(files.checkout.includes('type CheckoutMode = "shop" | "fuel" | "exchange" | "coupon"'), "four checkout modes missing");
+  assert(files.checkout.includes("加油站") && files.checkout.includes('mode === "exchange"'), "fuel/exchange mode switch missing");
+  assert(!files.checkout.includes("products.slice(0, 8)"), "product search results must not be truncated");
+  assert(files.checkout.includes("搜索活动名称、规则编号或未满足条件"), "blocked promotion search missing");
 
   assert(files.dashboard.includes("运营看板") && files.dashboard.includes("低库存 TOP 10"), "DashboardPage sections missing");
   assert(files.importPage.includes("Upload.Dragger") && files.importPage.includes("前端不解析文件内容"), "ImportPage upload contract missing");
