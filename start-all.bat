@@ -5,7 +5,7 @@ set "ROOT=%~dp0"
 set "BACKEND_DIR=%ROOT%backend"
 set "FRONTEND_DIR=%ROOT%frontend"
 set "BACKEND_PORT_START=18082"
-set "FRONTEND_PORT_START=5173"
+set "FRONTEND_PORT_START=5174"
 set "BACKEND_PORT=%BACKEND_PORT_START%"
 set "FRONTEND_PORT=%FRONTEND_PORT_START%"
 set "DB_URL=jdbc:postgresql://localhost:5432/cnpc_promotion"
@@ -90,24 +90,24 @@ if "%DRY_RUN%"=="1" (
   call :cleanup_frontends
 )
 
-set "FRONTEND_PORT="
-for /l %%p in (%FRONTEND_PORT_START%,1,5199) do (
-  if not defined FRONTEND_PORT (
-    netstat -ano | findstr /R /C:":%%p .*LISTENING" >nul 2>nul
-    if errorlevel 1 set "FRONTEND_PORT=%%p"
+set "FRONTEND_PORT=%FRONTEND_PORT_START%"
+if not "%DRY_RUN%"=="1" (
+  call :port_in_use %FRONTEND_PORT%
+  if not errorlevel 1 (
+    echo [ERROR] Customer demo port %FRONTEND_PORT% is occupied by another program.
+    echo [ERROR] Close that program, then run start-all.bat again.
+    goto fail
   )
-)
-if not defined FRONTEND_PORT (
-  echo [ERROR] No free frontend port found in range %FRONTEND_PORT_START%-5199.
-  goto fail
 )
 
 set "BACKEND_URL=http://127.0.0.1:%BACKEND_PORT%"
-set "FRONTEND_URL=http://127.0.0.1:%FRONTEND_PORT%/checkout"
+set "FRONTEND_URL=http://127.0.0.1:%FRONTEND_PORT%/operation-campaigns"
+set "CHECKOUT_URL=http://127.0.0.1:%FRONTEND_PORT%/checkout"
 set "FRONTEND_API_URL=http://127.0.0.1:%FRONTEND_PORT%/api/checkout/capabilities"
 
 echo Backend:  %BACKEND_URL%
-echo Frontend: %FRONTEND_URL%
+echo Demo:     %FRONTEND_URL%
+echo Checkout: %CHECKOUT_URL%
 
 if "%REUSE_BACKEND%"=="1" goto after_backend
 echo.
@@ -158,7 +158,8 @@ if errorlevel 1 goto fail
 
 echo.
 echo Start command finished.
-echo Open:         %FRONTEND_URL%
+echo Customer demo: %FRONTEND_URL%
+echo Checkout:      %CHECKOUT_URL%
 echo Health:       %BACKEND_URL%/actuator/health
 echo Capabilities: %BACKEND_URL%/api/checkout/capabilities
 echo.
@@ -218,7 +219,7 @@ if "%DRY_RUN%"=="1" (
   echo DRY_RUN verify and open "%FRONTEND_URL%"
   exit /b 0
 )
-echo Waiting for frontend page and checkout proxy...
+echo Waiting for customer demo page and checkout proxy...
 for /l %%i in (1,1,60) do (
   powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $page = Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 '%FRONTEND_URL%'; $api = Invoke-RestMethod -TimeoutSec 2 '%FRONTEND_API_URL%'; if ($page.StatusCode -eq 200 -and $api.success -and $api.data.apiVersion -eq 'checkout-v2') { exit 0 } } catch {}; exit 1" >nul 2>nul
   if not errorlevel 1 (
