@@ -18,6 +18,7 @@ public record ProductCatalogItem(
             throw new IllegalArgumentException("productCode is required");
         }
         productName = productName == null ? "" : productName;
+        category = ProductCategoryClassifier.resolve(productName, category);
         unitPrice = money(unitPrice);
         inventoryQuantity = quantity(inventoryQuantity);
     }

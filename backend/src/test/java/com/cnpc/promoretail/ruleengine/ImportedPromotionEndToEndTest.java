@@ -200,6 +200,32 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
     }
 
     @Test
+    void realCatalogCigaretteTriggersAllGiftTiers() {
+        ProductCatalogItem cigarette = productCatalogRepository.findByProductCode("70002759").orElseThrow();
+        assertThat(cigarette.productName()).contains("中华");
+        assertThat(cigarette.category()).isEqualTo("香烟");
+        assertThat(cigarette.unitPrice()).isEqualByComparingTo("70.00");
+
+        CalculationResult amount210 = realCigaretteAmount(cigarette, 3);
+        assertThat(ruleIds(amount210)).contains("abv2-g6-cigarette-200-gift-choice")
+                .doesNotContain("abv2-g6-cigarette-555-gift-ilite250", "abv2-g6-cigarette-888-gift-ilite500");
+
+        CalculationResult amount560 = realCigaretteAmount(cigarette, 8);
+        PromotionCandidate gift250 = candidate(amount560, "abv2-g6-cigarette-555-gift-ilite250");
+        assertThat(gift250.gifts()).singleElement().satisfies(gift -> {
+            assertThat(gift.productCode()).isEqualTo("70690981");
+            assertThat(gift.quantity()).isEqualTo(1);
+        });
+
+        CalculationResult amount910 = realCigaretteAmount(cigarette, 13);
+        PromotionCandidate gift500 = candidate(amount910, "abv2-g6-cigarette-888-gift-ilite500");
+        assertThat(gift500.gifts()).singleElement().satisfies(gift -> {
+            assertThat(gift.productCode()).isEqualTo("70690872");
+            assertThat(gift.quantity()).isEqualTo(1);
+        });
+    }
+
+    @Test
     void sequenceCouponsEnforceOrderAndEEnjoyCardPayment() {
         Coupon migrated = couponRepository.findByCouponId("demo-wechat-shake-003").orElseThrow();
         Coupon firstAvailable = sequenceCoupon(migrated, "sequence-test-1", 1, CouponStatus.AVAILABLE);
@@ -272,6 +298,13 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
         return calculate(order(
                 GAS_STATION, CustomerContext.anonymous(), FuelContext.empty(),
                 List.of(syntheticItem("70030041", "cigarette", 1, amount, "香烟")),
+                LocalDate.of(2026, 7, 9), DAYTIME, List.of()));
+    }
+
+    private CalculationResult realCigaretteAmount(ProductCatalogItem cigarette, int quantity) {
+        return calculate(order(
+                GAS_STATION, CustomerContext.anonymous(), FuelContext.empty(),
+                List.of(item(cigarette, quantity)),
                 LocalDate.of(2026, 7, 9), DAYTIME, List.of()));
     }
 

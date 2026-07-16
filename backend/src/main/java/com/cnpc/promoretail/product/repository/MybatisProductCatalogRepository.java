@@ -7,6 +7,7 @@ import com.cnpc.promoretail.importcenter.model.PriceImportRow;
 import com.cnpc.promoretail.inventory.persistence.entity.InventorySnapshotEntity;
 import com.cnpc.promoretail.inventory.persistence.mapper.InventorySnapshotMapper;
 import com.cnpc.promoretail.product.model.ProductCatalogItem;
+import com.cnpc.promoretail.product.model.ProductCategoryClassifier;
 import com.cnpc.promoretail.product.persistence.entity.ProductEntity;
 import com.cnpc.promoretail.product.persistence.entity.ProductPriceEntity;
 import com.cnpc.promoretail.product.persistence.mapper.ProductMapper;
@@ -145,15 +146,16 @@ public class MybatisProductCatalogRepository implements ProductCatalogRepository
                 .eq(ProductEntity::getProductCode, productCode));
         ProductEntity entity = existing == null ? new ProductEntity() : existing;
         entity.setProductCode(productCode);
-        entity.setProductName(notBlank(productName) ? productName : entity.getProductName());
+        String effectiveName = notBlank(productName) ? productName : entity.getProductName();
+        entity.setProductName(effectiveName);
         if (notBlank(barcode)) {
             entity.setBarcode(barcode);
         }
-        if (notBlank(category)) {
-            entity.setCategory(category);
-        }
-        entity.setCigarette(Boolean.FALSE);
-        entity.setFertilizer(Boolean.FALSE);
+        String effectiveCategory = ProductCategoryClassifier.resolve(effectiveName,
+                notBlank(category) ? category : entity.getCategory());
+        entity.setCategory(effectiveCategory);
+        entity.setCigarette(Boolean.TRUE.equals(entity.getCigarette()) || "香烟".equals(effectiveCategory));
+        entity.setFertilizer(Boolean.TRUE.equals(entity.getFertilizer()) || "化肥".equals(effectiveCategory));
         entity.setUpdatedAt(now);
         if (existing == null) {
             entity.setCreatedAt(now);
