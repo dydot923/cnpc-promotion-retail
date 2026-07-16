@@ -178,6 +178,14 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
         assertThat(ruleIds(cigarette600)).contains(
                         "abv2-g6-cigarette-200-gift-choice", "abv2-g6-cigarette-555-gift-ilite250")
                 .doesNotContain("abv2-g6-cigarette-888-gift-ilite500");
+        assertThat(recommended(cigarette600).ruleId()).isEqualTo("abv2-g6-cigarette-555-gift-ilite250");
+
+        CalculationResult cigarette900 = cigaretteAmount("900.00");
+        assertThat(ruleIds(cigarette900)).contains(
+                "abv2-g6-cigarette-200-gift-choice",
+                "abv2-g6-cigarette-555-gift-ilite250",
+                "abv2-g6-cigarette-888-gift-ilite500");
+        assertThat(recommended(cigarette900).ruleId()).isEqualTo("abv2-g6-cigarette-888-gift-ilite500");
     }
 
     @Test
@@ -305,6 +313,13 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
 
     private List<String> ruleIds(CalculationResult result) {
         return result.availableCandidates().stream().map(PromotionCandidate::ruleId).toList();
+    }
+
+    private PromotionCandidate recommended(CalculationResult result) {
+        return result.availableCandidates().stream()
+                .filter(candidate -> candidate.candidateId().equals(result.recommendedCandidateId()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("recommended candidate not found"));
     }
 
     private List<String> blockedReasons(CalculationResult result) {

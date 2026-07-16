@@ -105,6 +105,7 @@ type DemoCase = {
   label: string;
   description: string;
   expectedRuleIds: string[];
+  expectedGiftOptions?: string[][];
   cartItems: CartItem[];
   fuel: FuelForm;
   customer: CustomerForm;
@@ -248,6 +249,61 @@ const demoCases: DemoCase[] = [
     description: "会员购买 2 瓶伊力特 250ml，显示会员固定价和便利店券。",
     expectedRuleIds: ["abv2-g6-ilite-250-fixed", "abv2-g6-ilite-250-coupon"],
     cartItems: [item("70690981", "优斯麦尔 46度伊力特（佳藏）250ML", 2, 68, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-cigarette-200",
+    label: "G6 香烟满200赠品二选一",
+    description: "香烟消费 224 元，可选择 2 瓶优斯麦尔果汁或 2 个自有奶。",
+    expectedRuleIds: ["abv2-g6-cigarette-200-gift-choice"],
+    expectedGiftOptions: [["70727875"], ["70559364"]],
+    cartItems: [item("70030041", "黄山 金皖硬盒香烟(包) 13MG", 8, 28, "香烟", 50)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-cigarette-555",
+    label: "G6 香烟满555赠伊力特250ML",
+    description: "香烟消费 560 元，赠 1 瓶优斯麦尔 46 度伊力特（佳藏）250ML。",
+    expectedRuleIds: ["abv2-g6-cigarette-555-gift-ilite250"],
+    expectedGiftOptions: [["70690981"]],
+    cartItems: [item("70030041", "黄山 金皖硬盒香烟(包) 13MG", 20, 28, "香烟", 50)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-cigarette-888",
+    label: "G6 香烟满888赠伊力特500ML",
+    description: "香烟消费 896 元，赠 1 瓶优斯麦尔 46 度伊力特（佳藏）500ML。",
+    expectedRuleIds: ["abv2-g6-cigarette-888-gift-ilite500"],
+    expectedGiftOptions: [["70690872"]],
+    cartItems: [item("70030041", "黄山 金皖硬盒香烟(包) 13MG", 32, 28, "香烟", 50)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-store-gift",
+    label: "G6 便利店满额赠品二选一",
+    description: "便利店商品消费 44 元，可选择 1 盒英九庄园茶叶或 1 个自有奶。",
+    expectedRuleIds: ["abv2-g6-store-36-gift-choice"],
+    expectedGiftOptions: [["demo-yingjiu-tea"], ["70559364"]],
+    cartItems: [item("70727893", "优斯麦尔 西梅复合果汁饮品 0.3L", 8, 5.5, "包装饮料", 30)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-cotton-film",
+    label: "G6 棉包膜9卷赠完整礼包",
+    description: "购买棉包膜 9 卷，赠 2 件伊力特、1 件 M 枕牛奶、4 件红牛和 100 副手套。",
+    expectedRuleIds: ["abv2-g6-cotton-film-9-gift-pack"],
+    expectedGiftOptions: [["70690981", "70559368", "70356177", "70657932"]],
+    cartItems: [item("demo-cotton-film", "棉花膜（活动看板商品）", 9, 2000, "化工农资", 30)],
     fuel: fuel(),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-16" }
@@ -417,10 +473,17 @@ export default function CheckoutPage() {
     () => uniquePromotionCandidates(result?.availableCandidates || []),
     [result]
   );
-  const recommended = useMemo(
+  const backendRecommended = useMemo(
     () => result?.availableCandidates.find((candidate) => candidate.candidateId === result.recommendedCandidateId),
     [result]
   );
+  const acceptanceCandidate = useMemo(
+    () => activeDemo
+      ? result?.availableCandidates.find((candidate) => activeDemo.expectedRuleIds.includes(candidate.ruleId))
+      : undefined,
+    [activeDemo, result]
+  );
+  const recommended = acceptanceCandidate || backendRecommended;
   const selectedCandidate = useMemo(() => {
     if (!result) {
       return undefined;
@@ -445,11 +508,11 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     if (result) {
-      setSelectedCandidateId(result.recommendedCandidateId || result.originalPriceFallback.candidateId);
+      setSelectedCandidateId(recommended?.candidateId || result.originalPriceFallback.candidateId);
       setLatestConfirmationId(undefined);
       confirmMutation.reset();
     }
-  }, [result]);
+  }, [recommended?.candidateId, result]);
 
   const cartColumns: ColumnsType<CartItem> = [
     {
@@ -1174,7 +1237,7 @@ export default function CheckoutPage() {
                         key={candidate.candidateId}
                         candidate={candidate}
                         selected={selectedCandidateId === candidate.candidateId}
-                        recommended={candidate.candidateId === result.recommendedCandidateId}
+                        recommended={candidate.candidateId === recommended?.candidateId}
                         onSelect={() => setSelectedCandidateId(candidate.candidateId)}
                       />
                     ))}
@@ -1331,18 +1394,29 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
 
 function ScenarioAcceptance({ demo, result }: { demo: DemoCase; result: CheckoutCalculateResponse }) {
   const hitRuleIds = new Set(result.availableCandidates.map((candidate) => candidate.ruleId));
-  const missing = demo.expectedRuleIds.filter((ruleId) => !hitRuleIds.has(ruleId));
+  const missingRules = demo.expectedRuleIds.filter((ruleId) => !hitRuleIds.has(ruleId));
+  const targetCandidates = result.availableCandidates.filter((candidate) => demo.expectedRuleIds.includes(candidate.ruleId));
+  const missingGiftOptions = (demo.expectedGiftOptions || []).filter((expectedOption) =>
+    !targetCandidates.some((candidate) => {
+      const giftCodes = new Set(candidate.gifts.map((gift) => gift.productCode));
+      return expectedOption.every((productCode) => giftCodes.has(productCode));
+    })
+  );
+  const accepted = missingRules.length === 0 && missingGiftOptions.length === 0;
+  const successDetail = demo.expectedGiftOptions?.length
+    ? `已命中 ${demo.expectedRuleIds.length} 条目标规则，并返回 ${demo.expectedGiftOptions.length} 组赠品方案。`
+    : `已命中 ${demo.expectedRuleIds.length} 条目标规则：${demo.expectedRuleIds.join("、")}`;
+  const warningDetail = [
+    missingRules.length ? `未命中目标规则：${missingRules.join("、")}` : "",
+    missingGiftOptions.length ? `缺少 ${missingGiftOptions.length} 组赠品方案。` : ""
+  ].filter(Boolean).join(" ");
   return (
     <Alert
       className="scenario-acceptance"
-      type={missing.length === 0 ? "success" : "warning"}
+      type={accepted ? "success" : "warning"}
       showIcon
-      message={missing.length === 0 ? `验收通过：${demo.label}` : `请复核：${demo.label}`}
-      description={
-        missing.length === 0
-          ? `已命中 ${demo.expectedRuleIds.length} 条目标规则：${demo.expectedRuleIds.join("、")}`
-          : `未命中目标规则：${missing.join("、")}`
-      }
+      message={accepted ? `验收通过：${demo.label}` : `请复核：${demo.label}`}
+      description={accepted ? successDetail : warningDetail}
     />
   );
 }
