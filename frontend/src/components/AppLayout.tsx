@@ -50,10 +50,10 @@ const navItems: NavItem[] = [
   },
   {
     key: "operation-campaigns",
-    label: "运营发券",
+    label: "活动验收",
     path: "/operation-campaigns",
     icon: <GiftOutlined />,
-    roles: ["operator", "admin"]
+    roles: ["cashier", "station_manager", "operator", "admin"]
   },
   {
     key: "import",

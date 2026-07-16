@@ -123,6 +123,33 @@ class FlywayMigrationTest {
                     """)).isEqualTo(6);
             assertThat(count(statement, """
                     select count(*)
+                    from coupon_template
+                    where ((coupon_template_id = 'activation-gasoline-12'
+                            and face_value = 12.00 and min_spend_amount = 230.00)
+                       or (coupon_template_id = 'activation-diesel-20'
+                            and face_value = 20.00 and min_spend_amount = 400.00))
+                      and issue_quantity = 3
+                      and per_customer_limit = 3
+                    """)).isEqualTo(2);
+            assertThat(count(statement, """
+                    select count(*)
+                    from promotion_rule_draft
+                    where rule_id = 'abv2-e2-wing-card-399-coupon'
+                      and status = 'CONFIRMED'
+                      and (condition_json ->> 'minCartAmount')::numeric = 399.00
+                      and (benefit_json ->> 'giftCouponQuantity')::int = 2
+                    """)).isEqualTo(1);
+            assertThat(count(statement, """
+                    select count(*)
+                    from promotion_rule_draft
+                    where rule_id in (
+                        'abv2-e2-ilite-500-jia-case-coupon',
+                        'abv2-e2-ilite-500-li-case-coupon'
+                    )
+                      and (condition_json ->> 'minProductQuantity')::int = 6
+                    """)).isEqualTo(2);
+            assertThat(count(statement, """
+                    select count(*)
                     from promotion_rule_draft
                     where source_import_id = 'activity-board-v2-g7-resolution'
                       and status = 'CONFIRMED'

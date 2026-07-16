@@ -721,6 +721,59 @@ body {
   background: #f5f7fa;
 }
 
+.acceptance-catalog {
+  max-width: 1280px;
+}
+
+.acceptance-group {
+  padding: 14px 0;
+  border-top: 1px solid #e5eaf0;
+}
+
+.acceptance-group:first-of-type {
+  border-top: 0;
+}
+
+.acceptance-group h4.ant-typography {
+  margin: 0 0 10px;
+  color: #003f88;
+  font-size: 15px;
+}
+
+.acceptance-button-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.acceptance-button-grid .ant-btn {
+  min-width: 0;
+  height: auto;
+  min-height: 34px;
+  padding: 6px 10px;
+  white-space: normal;
+}
+
+.coupon-result-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.coupon-result-list > div {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5eaf0;
+}
+
+.coupon-result-list span {
+  color: #66788a;
+}
+
 .operation-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

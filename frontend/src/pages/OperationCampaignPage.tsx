@@ -1,8 +1,15 @@
-import { GiftOutlined, SendOutlined } from "@ant-design/icons";
+import { GiftOutlined, SendOutlined, ShoppingCartOutlined, StarOutlined, TeamOutlined } from "@ant-design/icons";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Alert, Button, Form, Input, InputNumber, Select, Space, Table, Tag, Typography, message } from "antd";
+import { Alert, Button, Form, Input, InputNumber, Select, Space, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  drawPointsLottery,
+  exchangePoints,
+  fetchBenefitPackages,
+  purchaseBenefitPackage
+} from "../api/activityAcceptance";
+import { changeMemberPoints, createMember, fetchMemberCoupons, issueActivationCoupons } from "../api/members";
 import {
   fetchOperationCampaigns,
   issueOperationCampaignCoupon,
@@ -10,7 +17,16 @@ import {
 } from "../api/operationCampaigns";
 import EmptyState from "../components/EmptyState";
 import Price from "../components/Price";
-import type { OperationCampaignDefinition, OperationCouponIssueResponse } from "../types";
+import type {
+  BenefitPackage,
+  BenefitPackagePurchaseResponse,
+  Coupon,
+  MemberCouponListResponse,
+  OperationCampaignDefinition,
+  OperationCouponIssueResponse,
+  PointsExchangeResponse,
+  PointsLotteryDrawResponse
+} from "../types";
 
 type CampaignForm = {
   campaignCode: string;
@@ -37,11 +53,65 @@ type IssueRow = {
   couponCount: number;
   totalFaceValue: number;
   couponIds: string[];
+  coupons: Coupon[];
   status: "SUCCESS" | "FAILED";
   message?: string;
 };
 
 const defaultCampaignCode = "rfm-recovery";
+
+const operationPresets: { key: string; label: string; values: Partial<CampaignForm> }[] = [
+  { key: "rfm-gasoline", label: "RFM汽油客户", values: { campaignCode: "rfm-recovery", customerType: "GASOLINE" } },
+  { key: "rfm-diesel", label: "RFM柴油客户", values: { campaignCode: "rfm-recovery", customerType: "DIESEL" } },
+  { key: "birthday", label: "生日礼包", values: { campaignCode: "birthday", memberCodes: "member-001", businessDate: "2026-07-08" } },
+  { key: "sign-3", label: "签到3天", values: { campaignCode: "sign-in", signInDays: 3 } },
+  { key: "sign-7", label: "签到7天", values: { campaignCode: "sign-in", signInDays: 7 } },
+  { key: "sign-10", label: "签到10天", values: { campaignCode: "sign-in", signInDays: 10 } },
+  { key: "group-2", label: "2人拼团", values: { campaignCode: "group-buy", groupSize: 2, memberRole: "NEW_MEMBER" } },
+  { key: "group-5", label: "5人拼团", values: { campaignCode: "group-buy", groupSize: 5, memberRole: "NEW_MEMBER" } },
+  { key: "group-8", label: "8人拼团", values: { campaignCode: "group-buy", groupSize: 8, memberRole: "NEW_MEMBER" } },
+  { key: "industry", label: "行业认证", values: { campaignCode: "industry-certification", qualificationType: "TEACHER" } },
+  { key: "ecommerce", label: "电商奖励", values: { campaignCode: "ecommerce", rewardCode: "STORE_12", quantity: 1 } }
+];
+
+const checkoutScenarioGroups = [
+  {
+    title: "品牌日与充值活动",
+    scenarios: [
+      ["a1-500", "逢7气惠-LNG满500"], ["a1-1000", "逢7气惠-LNG满1000"],
+      ["a1-1500", "逢7气惠-LNG满1500"], ["a1-2000", "逢7气惠-LNG满2000"],
+      ["a3", "加气站便利店9折"], ["a4", "逢8 CN98每升立减"],
+      ["g1", "逢7加气站全场9折"], ["g2", "逢9油站9折+3倍积分"],
+      ["a5-1000-normal", "十惠1000普通会员"], ["a5-1000-gold", "十惠1000金卡"],
+      ["a5-2000-normal", "十惠2000普通会员"], ["a5-2000-gold", "十惠2000金卡"],
+      ["a6", "小额充值666赠券"]
+    ]
+  },
+  {
+    title: "油非与气非互动",
+    scenarios: [
+      ["e1", "汽油满230赠非油券"], ["e1-diesel", "柴油满280赠非油券"],
+      ["e2", "伊力特250整件赠油券"], ["e2-ilite-500-jia", "佳藏500整件赠油券"],
+      ["e2-ilite-500-li", "礼藏500整件赠油券"], ["f1", "CNG满50赠2瓶水"],
+      ["e2-wing-card", "翼卡通399购卡赠油券"], ["f1-lng", "LNG满1000赠4瓶水"]
+    ]
+  },
+  {
+    title: "便利店与纯非促销",
+    scenarios: [
+      ["g3", "9.9元零食专区"], ["g4", "赛事啤酒赠券+夜折"], ["g5", "中秋满减+赠券"],
+      ["g6-ilite-250", "伊力特250会员价"], ["g6-ilite-500-jia", "佳藏500会员价"],
+      ["g6-ilite-500-li", "礼藏500会员价"], ["g6-cigarette-200", "香烟满200二选一"],
+      ["g6-cigarette-555", "香烟满555赠伊力特250"], ["g6-cigarette-888", "香烟满888赠伊力特500"],
+      ["g6-store-gift", "便利店满额赠品"], ["g6-cotton-film", "棉包膜9卷礼包"],
+      ["g7", "单品安全促销价"]
+    ]
+  },
+  {
+    title: "加油换购",
+    scenarios: [["h1", "加油换购驾驶包"], ["h2", "汽油满180换购红牛"]]
+  }
+] as const;
 
 export default function OperationCampaignPage() {
   const [form] = Form.useForm<CampaignForm>();
@@ -83,6 +153,7 @@ export default function OperationCampaignPage() {
             couponCount: 0,
             totalFaceValue: 0,
             couponIds: [],
+            coupons: [],
             status: "FAILED",
             message: error instanceof Error ? error.message : "发券失败"
           });
@@ -121,11 +192,15 @@ export default function OperationCampaignPage() {
     { title: "事件键", dataIndex: "eventKey", width: 180, render: (value) => value || "-" },
     { title: "券数", dataIndex: "couponCount", width: 80 },
     {
-      title: "券号/错误",
+      title: "实际发放权益",
       dataIndex: "couponIds",
       render: (_, record) =>
         record.status === "SUCCESS" ? (
-          <Space wrap>{record.couponIds.map((couponId) => <Tag key={couponId}>{couponId}</Tag>)}</Space>
+          <Space wrap>{record.coupons.map((coupon) => (
+            <Tag color="blue" key={coupon.couponId}>
+              {coupon.couponName} ¥{coupon.faceValue} / 满{coupon.minSpendAmount}
+            </Tag>
+          ))}</Space>
         ) : (
           <Typography.Text type="danger">{record.message}</Typography.Text>
         )
@@ -137,12 +212,12 @@ export default function OperationCampaignPage() {
       {contextHolder}
       <div className="page-header">
         <div>
-          <Typography.Title level={1}>运营发券</Typography.Title>
-          <Typography.Text className="page-subtitle">按活动规则向会员发放真实券实例</Typography.Text>
+          <Typography.Title level={1}>活动看板验收中心</Typography.Title>
+          <Typography.Text className="page-subtitle">逐项装载业务条件，调用真实规则、发券、积分与权益包接口</Typography.Text>
         </div>
         <Space>
-          <Tag color="blue">{campaignsQuery.data?.length || 0} 个活动</Tag>
-          <Tag color="green">写入 coupon</Tag>
+          <Tag color="blue">收银促销 + 会员运营</Tag>
+          <Tag color="green">真实写库</Tag>
         </Space>
       </div>
 
@@ -150,6 +225,18 @@ export default function OperationCampaignPage() {
         <Alert type="error" showIcon message="活动配置加载失败" description={campaignsQuery.error.message} className="result-alert" />
       ) : null}
 
+      <Tabs
+        defaultActiveKey="checkout"
+        items={[
+          {
+            key: "checkout",
+            label: "收银促销",
+            children: <CheckoutAcceptanceCatalog />
+          },
+          {
+            key: "coupon",
+            label: "运营发券",
+            children: (
       <div className="operation-grid">
         <section className="panel operation-form-panel">
           <Space className="panel-toolbar" align="start">
@@ -184,6 +271,21 @@ export default function OperationCampaignPage() {
             }}
             onFinish={(values) => issueMutation.mutate(values)}
           >
+            <div className="acceptance-button-grid">
+              {operationPresets.map((preset) => (
+                <Button
+                  key={preset.key}
+                  onClick={() => form.setFieldsValue({
+                    ...preset.values,
+                    groupId: preset.values.campaignCode === "group-buy"
+                      ? `group-${Date.now()}`
+                      : form.getFieldValue("groupId")
+                  })}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
             <Form.Item label="活动" name="campaignCode" rules={[{ required: true, message: "请选择活动" }]}>
               <Select
                 loading={campaignsQuery.isLoading}
@@ -276,6 +378,284 @@ export default function OperationCampaignPage() {
           )}
         </section>
       </div>
+            )
+          },
+          {
+            key: "lifecycle",
+            label: "会员生命周期",
+            children: <LifecycleAcceptance />
+          },
+          {
+            key: "points",
+            label: "积分活动",
+            children: <PointsAcceptance />
+          },
+          {
+            key: "packages",
+            label: "权益包",
+            children: <BenefitPackageAcceptance />
+          }
+        ]}
+      />
+    </>
+  );
+}
+
+function CheckoutAcceptanceCatalog() {
+  return (
+    <section className="panel acceptance-catalog">
+      <Space className="panel-toolbar" align="start">
+        <div>
+          <Typography.Title level={3} className="section-title">收银促销逐项入口</Typography.Title>
+          <Typography.Text type="secondary">点击后自动装载商品、油品、日期、会员等级与充值金额，再点击“一键计算促销”。</Typography.Text>
+        </div>
+        <ShoppingCartOutlined className="panel-icon" />
+      </Space>
+      {checkoutScenarioGroups.map((group) => (
+        <div className="acceptance-group" key={group.title}>
+          <Typography.Title level={4}>{group.title}</Typography.Title>
+          <div className="acceptance-button-grid">
+            {group.scenarios.map(([key, label]) => (
+              <Button key={key} href={`/checkout?demo=${key}`}>{label}</Button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+type LifecycleForm = {
+  mode: "NEW_MEMBER" | "POTENTIAL_GASOLINE" | "POTENTIAL_DIESEL";
+};
+
+function LifecycleAcceptance() {
+  const [form] = Form.useForm<LifecycleForm>();
+  const mutation = useMutation<MemberCouponListResponse, Error, LifecycleForm>({
+    mutationFn: async ({ mode }) => {
+      const suffix = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const memberCode = `accept-${mode.toLowerCase()}-${suffix}`;
+      const isNewMember = mode === "NEW_MEMBER";
+      const fuelTag = mode === "POTENTIAL_DIESEL" ? "diesel_customer" : "gasoline_customer";
+      await createMember({
+        memberCode,
+        memberName: isNewMember ? "验收新会员" : "验收潜在会员",
+        levelCode: "normal",
+        totalPoints: 2000,
+        availablePoints: 2000,
+        birthday: "1990-07-16",
+        province: "新疆",
+        usualProvince: "新疆",
+        eEnjoyCardNo: isNewMember ? `EJOY-${suffix}` : undefined,
+        status: "ACTIVE",
+        memberTags: [fuelTag],
+        openedCard: isNewMember
+      });
+      return isNewMember ? fetchMemberCoupons(memberCode) : issueActivationCoupons(memberCode);
+    }
+  });
+
+  return (
+    <div className="operation-grid">
+      <section className="panel operation-form-panel">
+        <Space className="panel-toolbar" align="start">
+          <div>
+            <Typography.Title level={3} className="section-title">新增会员与潜在会员</Typography.Title>
+            <Typography.Text type="secondary">创建独立验收会员并实际写入会员表和券实例，可重复验收。</Typography.Text>
+          </div>
+          <TeamOutlined className="panel-icon" />
+        </Space>
+        <Form form={form} layout="vertical" initialValues={{ mode: "NEW_MEMBER" }} onFinish={(values) => mutation.mutate(values)}>
+          <Form.Item label="验收活动" name="mode">
+            <Select options={[
+              { value: "NEW_MEMBER", label: "首次开通昆仑e享卡-4类券" },
+              { value: "POTENTIAL_GASOLINE", label: "潜在汽油会员-12元汽油券3张" },
+              { value: "POTENTIAL_DIESEL", label: "潜在柴油会员-20元柴油券3张" }
+            ]} />
+          </Form.Item>
+          <Button type="primary" htmlType="submit" loading={mutation.isPending}>创建会员并发放券包</Button>
+        </Form>
+      </section>
+      <section className="panel">
+        <Typography.Title level={3} className="section-title">实际发放结果</Typography.Title>
+        {mutation.error ? <Alert type="error" showIcon message="验收失败" description={mutation.error.message} /> : null}
+        {mutation.data ? (
+          <>
+            <Alert type="success" showIcon message={`验收通过：${mutation.data.memberCode}`} description={`已实际写入 ${mutation.data.coupons.length} 张券。`} />
+            <CouponResult coupons={mutation.data.coupons} />
+          </>
+        ) : <EmptyState description="选择活动后执行验收" />}
+      </section>
+    </div>
+  );
+}
+
+type PointsForm = {
+  memberCode: string;
+  businessDate: string;
+  pointsUsed: number;
+};
+
+type PointsAction = "TOP_UP" | "EXCHANGE" | "LOTTERY";
+type PointsActionResult = { title: string; detail: string; coupon?: Coupon | null };
+
+function PointsAcceptance() {
+  const [form] = Form.useForm<PointsForm>();
+  const mutation = useMutation<PointsActionResult, Error, { action: PointsAction; values: PointsForm }>({
+    mutationFn: async ({ action, values }) => {
+      if (action === "TOP_UP") {
+        const response = await changeMemberPoints(values.memberCode, { changeType: "ADD", amount: 2000, reason: "活动看板验收补充积分" });
+        return { title: "积分已补充", detail: `当前可用积分 ${response.availablePoints}` };
+      }
+      if (action === "EXCHANGE") {
+        const response: PointsExchangeResponse = await exchangePoints(values.memberCode, {
+          pointsUsed: values.pointsUsed,
+          businessDate: values.businessDate,
+          stationCode: "1-A6501-C001-S001",
+          operatorId: "acceptance",
+          operatorName: "验收员"
+        });
+        return { title: "积分兑换9折券成功", detail: `扣除 ${response.pointsUsed} 积分，剩余 ${response.availablePointsAfter}`, coupon: response.coupon };
+      }
+      const response: PointsLotteryDrawResponse = await drawPointsLottery(values.memberCode, {
+        businessDate: values.businessDate,
+        stationCode: "1-A6501-C001-S001",
+        operatorId: "acceptance",
+        operatorName: "验收员"
+      });
+      return { title: "500积分抽奖完成", detail: `${response.resultLabel}，剩余 ${response.availablePointsAfter} 积分`, coupon: response.prizeCoupon };
+    }
+  });
+
+  const run = async (action: PointsAction) => {
+    const values = await form.validateFields();
+    mutation.mutate({ action, values });
+  };
+
+  return (
+    <div className="operation-grid">
+      <section className="panel operation-form-panel">
+        <Space className="panel-toolbar" align="start">
+          <div>
+            <Typography.Title level={3} className="section-title">积分兑换与积分抽奖</Typography.Title>
+            <Typography.Text type="secondary">逢9积分兑换9折券；9-11、19-21、29-31及次月1日可用500积分抽奖。</Typography.Text>
+          </div>
+          <StarOutlined className="panel-icon" />
+        </Space>
+        <Form form={form} layout="vertical" initialValues={{ memberCode: "member-001", businessDate: "2026-07-19", pointsUsed: 100 }}>
+          <Form.Item label="会员编号" name="memberCode" rules={[{ required: true }]}><Input /></Form.Item>
+          <div className="compact-field-grid">
+            <Form.Item label="营业日期" name="businessDate" rules={[{ required: true }]}><Input type="date" /></Form.Item>
+            <Form.Item label="兑换积分" name="pointsUsed" rules={[{ required: true }]}><InputNumber min={1} precision={0} className="full-width" /></Form.Item>
+          </div>
+          <Space wrap>
+            <Button onClick={() => run("TOP_UP")}>补充2000积分</Button>
+            <Button type="primary" onClick={() => run("EXCHANGE")}>兑换9折券</Button>
+            <Button onClick={() => run("LOTTERY")}>500积分抽奖</Button>
+          </Space>
+        </Form>
+      </section>
+      <section className="panel">
+        <Typography.Title level={3} className="section-title">积分业务结果</Typography.Title>
+        {mutation.error ? <Alert type="error" showIcon message="操作失败" description={mutation.error.message} /> : null}
+        {mutation.data ? (
+          <>
+            <Alert type="success" showIcon message={mutation.data.title} description={mutation.data.detail} />
+            {mutation.data.coupon ? <CouponResult coupons={[mutation.data.coupon]} /> : null}
+          </>
+        ) : <EmptyState description="选择积分操作进行验收" />}
+      </section>
+    </div>
+  );
+}
+
+type PackageForm = { packageCode: string; memberCode: string; paymentAmount: number };
+
+function BenefitPackageAcceptance() {
+  const [form] = Form.useForm<PackageForm>();
+  const packagesQuery = useQuery({ queryKey: ["benefit-packages"], queryFn: fetchBenefitPackages });
+  const packageCode = Form.useWatch("packageCode", form);
+  const selectedPackage = useMemo(
+    () => packagesQuery.data?.find((item) => item.packageCode === packageCode),
+    [packageCode, packagesQuery.data]
+  );
+  useEffect(() => {
+    const first = packagesQuery.data?.[0];
+    if (first && !form.getFieldValue("packageCode")) {
+      form.setFieldsValue({ packageCode: first.packageCode, memberCode: "member-001", paymentAmount: Number(first.salePrice) });
+    }
+  }, [form, packagesQuery.data]);
+  const mutation = useMutation<BenefitPackagePurchaseResponse, Error, PackageForm>({
+    mutationFn: (values) => purchaseBenefitPackage(values.packageCode, {
+      memberCode: values.memberCode,
+      stationCode: "1-A6501-C001-S001",
+      paymentAmount: values.paymentAmount,
+      checkoutTransactionNo: `accept-package-${Date.now()}`,
+      operatorId: "acceptance",
+      operatorName: "验收员"
+    })
+  });
+
+  return (
+    <div className="operation-grid">
+      <section className="panel operation-form-panel">
+        <Typography.Title level={3} className="section-title">十全十美与LNG/CNG权益包</Typography.Title>
+        <Form form={form} layout="vertical" onFinish={(values) => mutation.mutate(values)}>
+          <Form.Item label="权益包" name="packageCode" rules={[{ required: true }]}>
+            <Select
+              loading={packagesQuery.isLoading}
+              options={(packagesQuery.data || []).map((item) => ({ value: item.packageCode, label: `${item.packageName} / ¥${item.salePrice}` }))}
+              onChange={(value) => {
+                const item = packagesQuery.data?.find((candidate) => candidate.packageCode === value);
+                if (item) form.setFieldValue("paymentAmount", Number(item.salePrice));
+              }}
+            />
+          </Form.Item>
+          <div className="compact-field-grid">
+            <Form.Item label="会员编号" name="memberCode" rules={[{ required: true }]}><Input /></Form.Item>
+            <Form.Item label="实付金额" name="paymentAmount" rules={[{ required: true }]}><InputNumber min={0} precision={2} className="full-width" /></Form.Item>
+          </div>
+          <Button type="primary" htmlType="submit" loading={mutation.isPending} disabled={!selectedPackage}>购买并激活权益包</Button>
+        </Form>
+        {mutation.error ? <Alert className="result-alert" type="error" showIcon message="购买失败" description={mutation.error.message} /> : null}
+        {mutation.data ? <Alert className="result-alert" type="success" showIcon message={`购买成功：${mutation.data.packageName}`} description={`权益快照 ${mutation.data.entitlementSnapshot.length} 项，单号 ${mutation.data.purchaseId}`} /> : null}
+      </section>
+      <section className="panel">
+        <Typography.Title level={3} className="section-title">权益明细</Typography.Title>
+        {selectedPackage ? <BenefitPackageItems benefitPackage={selectedPackage} /> : <EmptyState description="请选择权益包" />}
+      </section>
+    </div>
+  );
+}
+
+function CouponResult({ coupons }: { coupons: Coupon[] }) {
+  return (
+    <div className="coupon-result-list">
+      {coupons.map((coupon) => (
+        <div key={coupon.couponId}>
+          <strong>{coupon.couponName}</strong>
+          <span>¥{coupon.faceValue} / 满{coupon.minSpendAmount} / {coupon.validUntil || "按规则有效"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BenefitPackageItems({ benefitPackage }: { benefitPackage: BenefitPackage }) {
+  return (
+    <>
+      <Alert type="info" showIcon message={`${benefitPackage.packageName} / ¥${benefitPackage.salePrice}`} description={`${benefitPackage.salesChannel}，共 ${benefitPackage.items.length} 项权益。`} />
+      <Table
+        rowKey={(record) => `${record.sourceRowNumber}-${record.itemName}`}
+        dataSource={benefitPackage.items}
+        pagination={{ pageSize: 8, hideOnSinglePage: true }}
+        size="small"
+        columns={[
+          { title: "权益", dataIndex: "itemName" },
+          { title: "数量", dataIndex: "quantity", width: 90 },
+          { title: "说明", dataIndex: "remark" }
+        ]}
+      />
     </>
   );
 }
@@ -379,6 +759,7 @@ function successRow(campaign: OperationCampaignDefinition, response: OperationCo
     couponCount: response.coupons.length,
     totalFaceValue: response.coupons.reduce((total, coupon) => total + Number(coupon.faceValue || 0), 0),
     couponIds: response.coupons.map((coupon) => coupon.couponId),
+    coupons: response.coupons,
     status: "SUCCESS"
   };
 }

@@ -171,6 +171,17 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
         assertThat(candidate(ilite, "abv2-g6-ilite-250-coupon").coupons())
                 .singleElement().satisfies(gift -> assertThat(gift.amount()).isEqualByComparingTo("12.00"));
 
+        CalculationResult wingCard = calculate(order(
+                GAS_STATION, new CustomerContext(true, "GOLD", List.of()), FuelContext.empty(),
+                List.of(syntheticItem("demo-wing-card", "Xinjiang travel wing card", 1, "399.00", "daily goods")),
+                LocalDate.of(2026, 7, 9), DAYTIME, List.of()));
+        assertThat(candidate(wingCard, "abv2-e2-wing-card-399-coupon").coupons())
+                .singleElement().satisfies(coupon -> {
+                    assertThat(coupon.amount()).isEqualByComparingTo("100.00");
+                    assertThat(coupon.quantity()).isEqualTo(2);
+                    assertThat(coupon.useThreshold()).isEqualByComparingTo("101.00");
+                });
+
         CalculationResult cigarette300 = cigaretteAmount("300.00");
         assertThat(ruleIds(cigarette300)).contains("abv2-g6-cigarette-200-gift-choice")
                 .doesNotContain("abv2-g6-cigarette-555-gift-ilite250", "abv2-g6-cigarette-888-gift-ilite500");

@@ -31,6 +31,7 @@ import type { InputRef } from "antd/es/input";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useSearchParams } from "react-router-dom";
 import { calculateCheckout, confirmCheckout, fetchExchangeOffers } from "../api/checkout";
 import { fetchProductByBarcode, searchProducts } from "../api/products";
 import { fetchStations } from "../api/stations";
@@ -106,6 +107,8 @@ type DemoCase = {
   description: string;
   expectedRuleIds: string[];
   expectedGiftOptions?: string[][];
+  expectedCoupons?: { name: string; amount: number; quantity: number }[];
+  expectedPointsMultiplier?: number;
   cartItems: CartItem[];
   fuel: FuelForm;
   customer: CustomerForm;
@@ -114,12 +117,62 @@ type DemoCase = {
 
 const demoCases: DemoCase[] = [
   {
-    key: "a1-a2",
-    label: "A1/A2 逢7气惠 + 3倍积分",
+    key: "a1-500",
+    label: "A1 逢7气惠-LNG满500",
     description: "7/17/27 日，LNG 消费 500 元，赠 LNG/便利店券并预览 3 倍积分。",
     expectedRuleIds: ["abv2-a1-day7-gas-coupon"],
+    expectedCoupons: [
+      { name: "10元LNG券", amount: 10, quantity: 1 },
+      { name: "6元便利店商品券", amount: 6, quantity: 2 }
+    ],
+    expectedPointsMultiplier: 3,
     cartItems: [],
     fuel: fuel("LNG", "LNG", 500, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
+  },
+  {
+    key: "a1-1000",
+    label: "A1 逢7气惠-LNG满1000",
+    description: "LNG 消费 1000 元，赠 30 元 LNG 券 1 张和 12 元便利店券 1 张。",
+    expectedRuleIds: ["abv2-a1-day7-gas-coupon"],
+    expectedCoupons: [
+      { name: "30元LNG券", amount: 30, quantity: 1 },
+      { name: "12元便利店商品券", amount: 12, quantity: 1 }
+    ],
+    expectedPointsMultiplier: 3,
+    cartItems: [],
+    fuel: fuel("LNG", "LNG", 1000, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
+  },
+  {
+    key: "a1-1500",
+    label: "A1 逢7气惠-LNG满1500",
+    description: "LNG 消费 1500 元，赠 60 元 LNG 券 1 张和 12 元便利店券 2 张。",
+    expectedRuleIds: ["abv2-a1-day7-gas-coupon"],
+    expectedCoupons: [
+      { name: "60元LNG券", amount: 60, quantity: 1 },
+      { name: "12元便利店商品券", amount: 12, quantity: 2 }
+    ],
+    expectedPointsMultiplier: 3,
+    cartItems: [],
+    fuel: fuel("LNG", "LNG", 1500, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
+  },
+  {
+    key: "a1-2000",
+    label: "A1 逢7气惠-LNG满2000",
+    description: "LNG 消费 2000 元，赠 100 元 LNG 券 1 张和 12 元便利店券 3 张。",
+    expectedRuleIds: ["abv2-a1-day7-gas-coupon"],
+    expectedCoupons: [
+      { name: "100元LNG券", amount: 100, quantity: 1 },
+      { name: "12元便利店商品券", amount: 12, quantity: 3 }
+    ],
+    expectedPointsMultiplier: 3,
+    cartItems: [],
+    fuel: fuel("LNG", "LNG", 2000, 0),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-17", stationType: "gas_filling_station" }
   },
@@ -144,20 +197,76 @@ const demoCases: DemoCase[] = [
     context: { businessDate: "2026-07-18" }
   },
   {
-    key: "a5",
-    label: "A5 逢10超级十惠充值",
+    key: "a5-1000-gold",
+    label: "A5 超级十惠-充值1000金卡",
     description: "10/20/30 日，金卡会员充值 1000 元，展示普通券包与金卡加赠券。",
     expectedRuleIds: ["abv2-a5-day10-super-1000-gold"],
+    expectedCoupons: [
+      { name: "A5 Day10 12 yuan gasoline coupon", amount: 12, quantity: 2 },
+      { name: "A5 Day10 12 yuan convenience store coupon", amount: 12, quantity: 3 },
+      { name: "A5 Day10 10 yuan car wash coupon", amount: 10, quantity: 3 },
+      { name: "A5 Day10 15 yuan high-grade gasoline coupon", amount: 15, quantity: 1 }
+    ],
     cartItems: [],
     fuel: fuel(),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-20", rechargeAmount: 1000 }
   },
   {
+    key: "a5-1000-normal",
+    label: "A5 超级十惠-充值1000普通",
+    description: "非金卡会员充值 1000 元，赠汽油券 2 张、便利店券 3 张、洗车券 3 张。",
+    expectedRuleIds: ["abv2-a5-day10-super-1000-normal"],
+    expectedCoupons: [
+      { name: "A5 Day10 12 yuan gasoline coupon", amount: 12, quantity: 2 },
+      { name: "A5 Day10 12 yuan convenience store coupon", amount: 12, quantity: 3 },
+      { name: "A5 Day10 10 yuan car wash coupon", amount: 10, quantity: 3 }
+    ],
+    cartItems: [],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "silver", memberCode: "member-002" },
+    context: { businessDate: "2026-07-20", rechargeAmount: 1000 }
+  },
+  {
+    key: "a5-2000-gold",
+    label: "A5 超级十惠-充值2000金卡",
+    description: "金卡会员充值 2000 元，赠普通券包并加赠 2 张高标号汽油券。",
+    expectedRuleIds: ["abv2-a5-day10-super-2000-gold"],
+    expectedCoupons: [
+      { name: "A5 Day10 12 yuan gasoline coupon", amount: 12, quantity: 5 },
+      { name: "A5 Day10 12 yuan convenience store coupon", amount: 12, quantity: 6 },
+      { name: "A5 Day10 10 yuan car wash coupon", amount: 10, quantity: 6 },
+      { name: "A5 Day10 15 yuan high-grade gasoline coupon", amount: 15, quantity: 2 }
+    ],
+    cartItems: [],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-20", rechargeAmount: 2000 }
+  },
+  {
+    key: "a5-2000-normal",
+    label: "A5 超级十惠-充值2000普通",
+    description: "非金卡会员充值 2000 元，赠汽油券 5 张、便利店券 6 张、洗车券 6 张。",
+    expectedRuleIds: ["abv2-a5-day10-super-2000-normal"],
+    expectedCoupons: [
+      { name: "A5 Day10 12 yuan gasoline coupon", amount: 12, quantity: 5 },
+      { name: "A5 Day10 12 yuan convenience store coupon", amount: 12, quantity: 6 },
+      { name: "A5 Day10 10 yuan car wash coupon", amount: 10, quantity: 6 }
+    ],
+    cartItems: [],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "silver", memberCode: "member-002" },
+    context: { businessDate: "2026-07-20", rechargeAmount: 2000 }
+  },
+  {
     key: "a6",
     label: "A6 小额充值666赠券",
     description: "非十惠日充值 666 元，赠 3 张汽油券和 3 张便利店券。",
     expectedRuleIds: ["abv2-a6-small-recharge-666"],
+    expectedCoupons: [
+      { name: "Small recharge 10 yuan gasoline coupon", amount: 10, quantity: 3 },
+      { name: "Small recharge 12 yuan store coupon", amount: 12, quantity: 3 }
+    ],
     cartItems: [],
     fuel: fuel(),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
@@ -168,8 +277,26 @@ const demoCases: DemoCase[] = [
     label: "E1 买油赠非油券",
     description: "会员汽油消费满 230 元，赠香烟券和便利店券。",
     expectedRuleIds: ["abv2-e1-gasoline-gift-coupons"],
+    expectedCoupons: [
+      { name: "15元香烟券", amount: 15, quantity: 1 },
+      { name: "6元便利店商品券", amount: 6, quantity: 1 }
+    ],
     cartItems: [],
     fuel: fuel("GASOLINE", "92", 230, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "e1-diesel",
+    label: "E1 柴油满280赠非油券",
+    description: "会员柴油消费满 280 元，赠 15 元香烟券和 6 元便利店券。",
+    expectedRuleIds: ["abv2-e1-diesel-gift-coupons"],
+    expectedCoupons: [
+      { name: "15元香烟券", amount: 15, quantity: 1 },
+      { name: "6元便利店商品券", amount: 6, quantity: 1 }
+    ],
+    cartItems: [],
+    fuel: fuel("DIESEL", "0", 280, 0),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-11" }
   },
@@ -178,7 +305,41 @@ const demoCases: DemoCase[] = [
     label: "E2 伊力特整件赠汽油券",
     description: "会员购买整件伊力特 250ml，赠 2 张 100 元汽油券。",
     expectedRuleIds: ["abv2-e2-ilite-250-case-coupon"],
+    expectedCoupons: [{ name: "100元汽油券", amount: 100, quantity: 2 }],
     cartItems: [item("70690981", "优斯麦尔 46度伊力特（佳藏）250ML", 10, 68, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "e2-ilite-500-jia",
+    label: "E2 伊力特佳藏500ML整件赠油券",
+    description: "会员购买佳藏 500ML 整件 6 瓶，赠 2 张 100 元汽油券。",
+    expectedRuleIds: ["abv2-e2-ilite-500-jia-case-coupon"],
+    expectedCoupons: [{ name: "100元汽油券", amount: 100, quantity: 2 }],
+    cartItems: [item("70690872", "优斯麦尔 46度伊力特（佳藏）500ML", 6, 118, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "e2-ilite-500-li",
+    label: "E2 伊力特礼藏500ML整件赠油券",
+    description: "会员购买礼藏 500ML 整件 6 瓶，赠 4 张 100 元汽油券。",
+    expectedRuleIds: ["abv2-e2-ilite-500-li-case-coupon"],
+    expectedCoupons: [{ name: "100元汽油券", amount: 100, quantity: 4 }],
+    cartItems: [item("70690982", "优斯麦尔 52度伊力特（礼藏）500ML", 6, 298, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11" }
+  },
+  {
+    key: "e2-wing-card",
+    label: "E2 翼卡通399元购卡赠油券",
+    description: "会员 399 元购买新疆旅游翼卡通，赠 2 张 100 元汽油券（满 101 元可用）。",
+    expectedRuleIds: ["abv2-e2-wing-card-399-coupon"],
+    expectedCoupons: [{ name: "100元汽油券", amount: 100, quantity: 2 }],
+    cartItems: [item("demo-wing-card", "新疆旅游翼卡通", 1, 399, "日用品", 30)],
     fuel: fuel(),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-11" }
@@ -188,8 +349,20 @@ const demoCases: DemoCase[] = [
     label: "F1 CNG买气送水",
     description: "CNG 单笔满 50 元，赠 2 瓶格桑泉。",
     expectedRuleIds: ["abv2-f1-cng-gift-water"],
+    expectedGiftOptions: [["70545526"]],
     cartItems: [],
     fuel: fuel("CNG", "CNG", 50, 0),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-11", stationType: "gas_filling_station" }
+  },
+  {
+    key: "f1-lng",
+    label: "F1 LNG满1000赠4瓶水",
+    description: "LNG 单笔满 1000 元，赠 4 瓶格桑泉 500ML 矿泉水。",
+    expectedRuleIds: ["abv2-f1-lng-gift-water"],
+    expectedGiftOptions: [["70545526"]],
+    cartItems: [],
+    fuel: fuel("LNG", "LNG", 1000, 0),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-11", stationType: "gas_filling_station" }
   },
@@ -244,11 +417,34 @@ const demoCases: DemoCase[] = [
     context: { businessDate: "2026-09-15" }
   },
   {
-    key: "g6",
-    label: "G6 伊力特会员价+赠券",
+    key: "g6-ilite-250",
+    label: "G6 伊力特250ML会员价+赠券",
     description: "会员购买 2 瓶伊力特 250ml，显示会员固定价和便利店券。",
     expectedRuleIds: ["abv2-g6-ilite-250-fixed", "abv2-g6-ilite-250-coupon"],
+    expectedCoupons: [{ name: "12元商品券", amount: 12, quantity: 1 }],
     cartItems: [item("70690981", "优斯麦尔 46度伊力特（佳藏）250ML", 2, 68, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-ilite-500-jia",
+    label: "G6 伊力特佳藏500ML会员价+赠券",
+    description: "会员购买 2 瓶佳藏 500ML，执行 216 元会员价并赠 1 张 12 元券。",
+    expectedRuleIds: ["abv2-g6-ilite-500-jia-fixed", "abv2-g6-ilite-500-jia-coupon"],
+    expectedCoupons: [{ name: "12元商品券", amount: 12, quantity: 1 }],
+    cartItems: [item("70690872", "优斯麦尔 46度伊力特（佳藏）500ML", 2, 128, "酒类", 110)],
+    fuel: fuel(),
+    customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
+    context: { businessDate: "2026-07-16" }
+  },
+  {
+    key: "g6-ilite-500-li",
+    label: "G6 伊力特礼藏500ML会员价+赠券",
+    description: "会员购买 2 瓶礼藏 500ML，执行 516 元会员价并赠 2 张 12 元券。",
+    expectedRuleIds: ["abv2-g6-ilite-500-li-fixed", "abv2-g6-ilite-500-li-coupon"],
+    expectedCoupons: [{ name: "12元商品券", amount: 12, quantity: 2 }],
+    cartItems: [item("70690982", "优斯麦尔 52度伊力特（礼藏）500ML", 2, 298, "酒类", 110)],
     fuel: fuel(),
     customer: { member: true, memberLevel: "gold", memberCode: "demo-member-002" },
     context: { businessDate: "2026-07-16" }
@@ -344,6 +540,33 @@ const demoCases: DemoCase[] = [
   }
 ];
 
+const demoCaseOptions = [
+  {
+    label: "品牌日与充值活动",
+    options: demoCases
+      .filter((demo) => demo.key.startsWith("a") || demo.key === "g1" || demo.key === "g2")
+      .map((demo) => ({ value: demo.key, label: demo.label }))
+  },
+  {
+    label: "油非与气非互动",
+    options: demoCases
+      .filter((demo) => demo.key.startsWith("e") || demo.key.startsWith("f"))
+      .map((demo) => ({ value: demo.key, label: demo.label }))
+  },
+  {
+    label: "便利店与纯非促销",
+    options: demoCases
+      .filter((demo) => demo.key.startsWith("g") && !["g1", "g2"].includes(demo.key))
+      .map((demo) => ({ value: demo.key, label: demo.label }))
+  },
+  {
+    label: "加油换购",
+    options: demoCases
+      .filter((demo) => demo.key.startsWith("h"))
+      .map((demo) => ({ value: demo.key, label: demo.label }))
+  }
+];
+
 const stationTypeOptions = [
   { value: "gas_station", label: "加油站" },
   { value: "gas_filling_station", label: "加气站（CNG/LNG）" }
@@ -365,6 +588,8 @@ const memberLevelOptions = [
 ];
 
 export default function CheckoutPage() {
+  const [searchParams] = useSearchParams();
+  const requestedDemoKey = searchParams.get("demo") || undefined;
   const [productForm] = Form.useForm<ProductForm>();
   const [fuelForm] = Form.useForm<FuelForm>();
   const [customerForm] = Form.useForm<CustomerForm>();
@@ -505,6 +730,16 @@ export default function CheckoutPage() {
   useEffect(() => {
     barcodeInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!requestedDemoKey || requestedDemoKey === loadedDemoKey) {
+      return;
+    }
+    const requestedDemo = demoCases.find((demo) => demo.key === requestedDemoKey);
+    if (requestedDemo) {
+      loadDemo(requestedDemo);
+    }
+  }, [loadedDemoKey, requestedDemoKey]);
 
   useEffect(() => {
     if (result) {
@@ -953,7 +1188,7 @@ export default function CheckoutPage() {
                         className="full-width"
                         value={loadedDemoKey}
                         placeholder="选择一个活动，自动载入商品、日期和业务条件"
-                        options={demoCases.map((demo) => ({ value: demo.key, label: demo.label }))}
+                        options={demoCaseOptions}
                         onChange={(key) => {
                           const demo = demoCases.find((item) => item.key === key);
                           if (demo) loadDemo(demo);
@@ -967,6 +1202,9 @@ export default function CheckoutPage() {
                           description={`${activeDemo.description} 已载入，点击右上角“一键计算促销”验收。`}
                         />
                       ) : null}
+                      <Button href="/operation-campaigns" icon={<GiftOutlined />}>
+                        会员发券、积分与权益包验收
+                      </Button>
                     </div>
                   )
                 },
@@ -1402,13 +1640,31 @@ function ScenarioAcceptance({ demo, result }: { demo: DemoCase; result: Checkout
       return expectedOption.every((productCode) => giftCodes.has(productCode));
     })
   );
-  const accepted = missingRules.length === 0 && missingGiftOptions.length === 0;
-  const successDetail = demo.expectedGiftOptions?.length
-    ? `已命中 ${demo.expectedRuleIds.length} 条目标规则，并返回 ${demo.expectedGiftOptions.length} 组赠品方案。`
-    : `已命中 ${demo.expectedRuleIds.length} 条目标规则：${demo.expectedRuleIds.join("、")}`;
+  const targetCoupons = targetCandidates.flatMap((candidate) => candidate.coupons);
+  const missingCoupons = (demo.expectedCoupons || []).filter((expected) =>
+    !targetCoupons.some((coupon) =>
+      coupon.couponName === expected.name
+      && Number(coupon.amount) === expected.amount
+      && Number(coupon.quantity) === expected.quantity
+    )
+  );
+  const pointsMismatch = demo.expectedPointsMultiplier !== undefined
+    && Number(result.pointsPreview?.multiplier) !== demo.expectedPointsMultiplier;
+  const accepted = missingRules.length === 0
+    && missingGiftOptions.length === 0
+    && missingCoupons.length === 0
+    && !pointsMismatch;
+  const benefitChecks = [
+    demo.expectedGiftOptions?.length ? `${demo.expectedGiftOptions.length} 组赠品` : "",
+    demo.expectedCoupons?.length ? `${demo.expectedCoupons.length} 类赠券` : "",
+    demo.expectedPointsMultiplier ? `${demo.expectedPointsMultiplier} 倍积分` : ""
+  ].filter(Boolean).join("、");
+  const successDetail = `已命中 ${demo.expectedRuleIds.length} 条目标规则${benefitChecks ? `，并核对 ${benefitChecks}` : ""}。`;
   const warningDetail = [
     missingRules.length ? `未命中目标规则：${missingRules.join("、")}` : "",
-    missingGiftOptions.length ? `缺少 ${missingGiftOptions.length} 组赠品方案。` : ""
+    missingGiftOptions.length ? `缺少 ${missingGiftOptions.length} 组赠品方案。` : "",
+    missingCoupons.length ? `缺少 ${missingCoupons.length} 类目标赠券。` : "",
+    pointsMismatch ? `未返回 ${demo.expectedPointsMultiplier} 倍积分。` : ""
   ].filter(Boolean).join(" ");
   return (
     <Alert

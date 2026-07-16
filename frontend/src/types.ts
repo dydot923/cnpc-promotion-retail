@@ -289,7 +289,12 @@ export type MemberResponse = {
   availablePoints: number;
   birthday?: string | null;
   province?: string | null;
+  eEnjoyCardNo?: string | null;
+  usualProvince?: string | null;
+  registeredAt?: string | null;
+  cardOpenedAt?: string | null;
   status: string;
+  memberTags: string[];
   discountRate: number;
   pointsMultiplier: number;
   benefits: string[];
@@ -309,7 +314,13 @@ export type MemberCreateRequest = {
   availablePoints?: number;
   birthday?: string;
   province?: string;
+  eEnjoyCardNo?: string;
+  usualProvince?: string;
+  registeredAt?: string;
+  cardOpenedAt?: string;
   status?: string;
+  memberTags?: string[];
+  openedCard?: boolean;
 };
 
 export type MemberUpdateRequest = {
@@ -318,7 +329,72 @@ export type MemberUpdateRequest = {
   levelCode?: string;
   birthday?: string;
   province?: string;
+  eEnjoyCardNo?: string;
+  usualProvince?: string;
+  registeredAt?: string;
+  cardOpenedAt?: string;
   status?: string;
+  memberTags?: string[];
+  openedCard?: boolean;
+};
+
+export type MemberCouponListResponse = {
+  memberCode: string;
+  coupons: Coupon[];
+};
+
+export type PointsExchangeResponse = {
+  exchangeId: string;
+  memberCode: string;
+  pointsUsed: number;
+  availablePointsAfter: number;
+  businessDate: string;
+  coupon: Coupon;
+};
+
+export type PointsLotteryDrawResponse = {
+  drawId: string;
+  memberCode: string;
+  activityCode: string;
+  pointsCost: number;
+  availablePointsAfter: number;
+  prizeType: string;
+  resultLabel: string;
+  prizeCoupon?: Coupon | null;
+  businessDate: string;
+  createdAt: string;
+};
+
+export type BenefitPackageItem = {
+  itemName: string;
+  quantity: number;
+  remark: string;
+  sourceRowNumber?: number | null;
+};
+
+export type BenefitPackage = {
+  packageCode: string;
+  packageName: string;
+  salesChannel: string;
+  salePrice: number;
+  status: string;
+  sourceSheetName: string;
+  sourceRowNumber?: number | null;
+  items: BenefitPackageItem[];
+};
+
+export type BenefitPackagePurchaseResponse = {
+  purchaseId: string;
+  packageCode: string;
+  packageName: string;
+  salePrice: number;
+  paymentAmount: number;
+  memberCode: string;
+  stationCode: string;
+  checkoutTransactionNo: string;
+  status: string;
+  entitlementSnapshot: BenefitPackageItem[];
+  purchasedAt: string;
 };
 
 export type PointsChangeRequest = {

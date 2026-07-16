@@ -1,6 +1,7 @@
 import { apiRequest } from "./request";
 import type {
   MemberCreateRequest,
+  MemberCouponListResponse,
   MemberIdentifyRequest,
   MemberResponse,
   MemberUpdateRequest,
@@ -44,5 +45,15 @@ export function changeMemberPoints(
   return apiRequest<PointsChangeResponse>(`/members/${encodeURIComponent(memberCode)}/points`, {
     method: "POST",
     body: JSON.stringify(request)
+  });
+}
+
+export function fetchMemberCoupons(memberCode: string): Promise<MemberCouponListResponse> {
+  return apiRequest<MemberCouponListResponse>(`/members/${encodeURIComponent(memberCode)}/coupons`);
+}
+
+export function issueActivationCoupons(memberCode: string): Promise<MemberCouponListResponse> {
+  return apiRequest<MemberCouponListResponse>(`/members/${encodeURIComponent(memberCode)}/activation-coupons`, {
+    method: "POST"
   });
 }

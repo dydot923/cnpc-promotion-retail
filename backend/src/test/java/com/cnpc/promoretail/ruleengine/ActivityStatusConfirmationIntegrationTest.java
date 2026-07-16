@@ -69,11 +69,11 @@ class ActivityStatusConfirmationIntegrationTest extends PostgresIntegrationTestS
     void e2Completes500mlWholeCaseCouponRules() {
         CalculationResult jia = calculate(List.of(rule("abv2-e2-ilite-500-jia-case-coupon")),
                 GAS_STATION, member(), FuelContext.empty(),
-                List.of(syntheticItem("70690872", "Ilite 500ml Jia", 10, "21.60", "alcohol")),
+                List.of(syntheticItem("70690872", "Ilite 500ml Jia", 6, "118.00", "alcohol")),
                 LocalDate.of(2026, 7, 11));
         CalculationResult li = calculate(List.of(rule("abv2-e2-ilite-500-li-case-coupon")),
                 GAS_STATION, member(), FuelContext.empty(),
-                List.of(syntheticItem("70690982", "Ilite 500ml Li", 10, "51.60", "alcohol")),
+                List.of(syntheticItem("70690982", "Ilite 500ml Li", 6, "298.00", "alcohol")),
                 LocalDate.of(2026, 7, 11));
 
         assertThat(candidate(jia, "abv2-e2-ilite-500-jia-case-coupon").coupons()).singleElement()

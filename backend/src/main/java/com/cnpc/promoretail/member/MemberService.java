@@ -37,7 +37,8 @@ public class MemberService {
             new BigDecimal("200.00"),
             List.of("fuel_gasoline"),
             List.of(),
-            60
+            60,
+            1
     );
     private static final LifecycleCouponSpec NEW_MEMBER_HIGH_GRADE_GASOLINE_COUPON = new LifecycleCouponSpec(
             "new-member-highgrade-gasoline-15",
@@ -46,7 +47,8 @@ public class MemberService {
             new BigDecimal("200.00"),
             List.of("fuel_high_grade_gasoline"),
             List.of(),
-            60
+            60,
+            1
     );
     private static final LifecycleCouponSpec NEW_MEMBER_STORE_COUPON = new LifecycleCouponSpec(
             "new-member-store-12",
@@ -55,7 +57,8 @@ public class MemberService {
             new BigDecimal("50.00"),
             List.of("store"),
             List.of("cigarette"),
-            60
+            60,
+            1
     );
     private static final LifecycleCouponSpec NEW_MEMBER_CAR_WASH_COUPON = new LifecycleCouponSpec(
             "new-member-carwash-10",
@@ -64,25 +67,28 @@ public class MemberService {
             new BigDecimal("11.00"),
             List.of("car_wash"),
             List.of(),
-            30
+            30,
+            1
     );
     private static final LifecycleCouponSpec ACTIVATION_GASOLINE_COUPON = new LifecycleCouponSpec(
-            "activation-gasoline-10",
-            "Potential member 10 yuan gasoline coupon",
-            new BigDecimal("10.00"),
-            new BigDecimal("200.00"),
+            "activation-gasoline-12",
+            "Potential member 12 yuan gasoline coupon",
+            new BigDecimal("12.00"),
+            new BigDecimal("230.00"),
             List.of("fuel_gasoline"),
             List.of(),
-            60
+            60,
+            3
     );
     private static final LifecycleCouponSpec ACTIVATION_DIESEL_COUPON = new LifecycleCouponSpec(
-            "activation-diesel-10",
-            "Potential member 10 yuan diesel coupon",
-            new BigDecimal("10.00"),
-            new BigDecimal("200.00"),
+            "activation-diesel-20",
+            "Potential member 20 yuan diesel coupon",
+            new BigDecimal("20.00"),
+            new BigDecimal("400.00"),
             List.of("fuel_diesel"),
             List.of(),
-            60
+            60,
+            3
     );
     private static final List<LifecycleCouponSpec> NEW_MEMBER_COUPON_PACKAGE = List.of(
             NEW_MEMBER_GASOLINE_COUPON,
@@ -335,42 +341,41 @@ public class MemberService {
         List<Coupon> existing = couponRepository.findByHolderMemberId(member.memberCode()).stream()
                 .filter(coupon -> templateIds.contains(coupon.couponTemplateId()))
                 .toList();
-        Set<String> existingTemplateIds = new HashSet<>(existing.stream()
-                .map(Coupon::couponTemplateId)
-                .toList());
         List<Coupon> result = new ArrayList<>(existing);
         LocalDate validFrom = LocalDate.now();
         LocalDateTime issuedAt = LocalDateTime.now();
         for (LifecycleCouponSpec spec : specs) {
-            if (existingTemplateIds.contains(spec.templateId())) {
-                continue;
+            long existingCount = existing.stream()
+                    .filter(coupon -> spec.templateId().equals(coupon.couponTemplateId()))
+                    .count();
+            for (int index = (int) existingCount + 1; index <= spec.quantity(); index++) {
+                Coupon coupon = new Coupon(
+                        couponId(packageCode, member.memberCode(), spec.templateId(), index),
+                        spec.templateId(),
+                        spec.couponName(),
+                        spec.faceValue(),
+                        spec.minSpendAmount(),
+                        spec.applicableCategories(),
+                        spec.excludedCategories(),
+                        List.of(),
+                        List.of(),
+                        validFrom,
+                        validFrom.plusDays(spec.validDays() - 1L),
+                        true,
+                        false,
+                        CouponStatus.AVAILABLE,
+                        issuedAt,
+                        null,
+                        SYSTEM_OPERATOR,
+                        BigDecimal.ZERO,
+                        "",
+                        null,
+                        member.memberCode()
+                );
+                Coupon saved = couponRepository.save(coupon);
+                auditCouponIssue(saved, member.memberCode(), sourceEventId, reason);
+                result.add(saved);
             }
-            Coupon coupon = new Coupon(
-                    couponId(packageCode, member.memberCode(), spec.templateId()),
-                    spec.templateId(),
-                    spec.couponName(),
-                    spec.faceValue(),
-                    spec.minSpendAmount(),
-                    spec.applicableCategories(),
-                    spec.excludedCategories(),
-                    List.of(),
-                    List.of(),
-                    validFrom,
-                    validFrom.plusDays(spec.validDays() - 1L),
-                    true,
-                    false,
-                    CouponStatus.AVAILABLE,
-                    issuedAt,
-                    null,
-                    SYSTEM_OPERATOR,
-                    BigDecimal.ZERO,
-                    "",
-                    null,
-                    member.memberCode()
-            );
-            Coupon saved = couponRepository.save(coupon);
-            auditCouponIssue(saved, member.memberCode(), sourceEventId, reason);
-            result.add(saved);
         }
         return result.stream()
                 .sorted(Comparator.comparing(Coupon::couponTemplateId).thenComparing(Coupon::couponId))
@@ -398,8 +403,9 @@ public class MemberService {
         );
     }
 
-    private String couponId(String packageCode, String memberCode, String templateId) {
-        UUID uuid = UUID.nameUUIDFromBytes((packageCode + ":" + memberCode + ":" + templateId)
+    private String couponId(String packageCode, String memberCode, String templateId, int index) {
+        String sequence = index == 1 ? "" : ":" + index;
+        UUID uuid = UUID.nameUUIDFromBytes((packageCode + ":" + memberCode + ":" + templateId + sequence)
                 .getBytes(StandardCharsets.UTF_8));
         return "coupon-" + packageCode + "-" + uuid;
     }
@@ -435,7 +441,8 @@ public class MemberService {
             BigDecimal minSpendAmount,
             List<String> applicableCategories,
             List<String> excludedCategories,
-            int validDays
+            int validDays,
+            int quantity
     ) {
     }
 

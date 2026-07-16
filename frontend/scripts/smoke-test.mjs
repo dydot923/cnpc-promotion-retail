@@ -5,9 +5,9 @@ const requireFrontendSmoke = process.env.REQUIRE_FRONTEND_SMOKE === "true";
 
 const requiredCheckoutLabels = [
   "活动看板逐项验收",
-  "A1/A2 逢7气惠 + 3倍积分",
+  "A1 逢7气惠-LNG满500",
   "A4 逢8 CN98每升立减",
-  "A5 逢10超级十惠充值",
+  "A5 超级十惠-充值1000金卡",
   "G3 9.9元零食专区",
   "G6 香烟满200赠品二选一",
   "G6 香烟满555赠伊力特250ML",
@@ -25,7 +25,7 @@ const requiredCheckoutLabels = [
   "查询并加入"
 ];
 
-const requiredNavLabels = ["收银结算", "运营看板", "数据导入", "库存预警", "规则管理", "AI 海报"];
+const requiredNavLabels = ["收银结算", "活动验收", "运营看板", "数据导入", "库存预警", "规则管理", "AI 海报"];
 
 const forbiddenFrontendPatterns = [
   /isPromotionEligible/,
@@ -48,6 +48,7 @@ async function main() {
     inventory: await readFile("src/pages/InventoryAlertPage.tsx", "utf8"),
     rules: await readFile("src/pages/RuleManagementPage.tsx", "utf8"),
     poster: await readFile("src/pages/PosterPage.tsx", "utf8"),
+    operationCampaigns: await readFile("src/pages/OperationCampaignPage.tsx", "utf8"),
     theme: await readFile("src/theme.ts", "utf8"),
     styles: await readFile("src/styles.css", "utf8"),
     request: await readFile("src/api/request.ts", "utf8"),
@@ -77,6 +78,8 @@ async function main() {
   assert(files.inventory.includes("生成补货清单") && files.inventory.includes("导出 Excel"), "InventoryAlertPage actions missing");
   assert(files.rules.includes("规则详情") && files.rules.includes("条件 JSON") && files.rules.includes("审计日志"), "RuleManagementPage drawer missing");
   assert(files.poster.includes("AI 海报服务未配置") && files.poster.includes("确认发布"), "PosterPage review flow missing");
+  assert(files.operationCampaigns.includes("活动看板验收中心"), "activity acceptance center missing");
+  assert(files.operationCampaigns.includes("会员生命周期") && files.operationCampaigns.includes("积分活动") && files.operationCampaigns.includes("权益包"), "activity acceptance tabs missing");
 
   assert(files.theme.includes("#D71920") && files.theme.includes("#003F88") && files.theme.includes("#FFB81C"), "CNPC theme colors missing");
   assert(files.styles.includes(".header-brand-stripe"), "brand stripe missing");
@@ -121,7 +124,7 @@ async function canReachFrontend() {
 }
 
 async function smokeFrontendRoutes() {
-  for (const path of ["/checkout", "/dashboard", "/import", "/inventory", "/rules", "/poster", "/missing-route"]) {
+  for (const path of ["/checkout", "/operation-campaigns", "/dashboard", "/import", "/inventory", "/rules", "/poster", "/missing-route"]) {
     const response = await fetch(`${frontendBaseUrl}${path}`);
     assert(response.ok, `${path} should return index.html from Vite dev server`);
     const html = await response.text();

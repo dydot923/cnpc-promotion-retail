@@ -163,15 +163,20 @@ class MemberServiceTest {
 
         assertThat(first.coupons())
                 .extracting(MemberCouponResponse::couponTemplateId)
-                .containsExactly("activation-diesel-10");
+                .containsExactly("activation-diesel-20", "activation-diesel-20", "activation-diesel-20");
         assertThat(second.coupons())
                 .extracting(MemberCouponResponse::couponTemplateId)
-                .containsExactly("activation-diesel-10");
+                .containsExactly("activation-diesel-20", "activation-diesel-20", "activation-diesel-20");
+        assertThat(first.coupons())
+                .allSatisfy(coupon -> {
+                    assertThat(coupon.faceValue()).isEqualByComparingTo("20.00");
+                    assertThat(coupon.minSpendAmount()).isEqualByComparingTo("400.00");
+                });
         assertThat(couponRepository.findByHolderMemberId("member-002").stream()
                 .filter(coupon -> coupon.couponTemplateId().startsWith("activation-")))
-                .hasSize(1);
+                .hasSize(3);
         assertThat(auditLogRepository.search(new AuditLogQuery("COUPON_ISSUE", "COUPON", null, "system", 10)))
-                .hasSize(1);
+                .hasSize(3);
     }
 
     @Test
