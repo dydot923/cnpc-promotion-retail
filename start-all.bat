@@ -6,6 +6,7 @@ set "BACKEND_DIR=%ROOT%backend"
 set "FRONTEND_DIR=%ROOT%frontend"
 set "BACKEND_PORT_START=18082"
 set "FRONTEND_PORT_START=5174"
+set "DEMO_STATION_CODE=1-A6501-C001-S001"
 set "BACKEND_PORT=%BACKEND_PORT_START%"
 set "FRONTEND_PORT=%FRONTEND_PORT_START%"
 set "DB_URL=jdbc:postgresql://localhost:5432/cnpc_promotion"
@@ -59,7 +60,15 @@ if errorlevel 1 (
 echo.
 echo [2/4] Resolving backend service...
 set "BACKEND_PORT="
-for /f "delims=" %%p in ('powershell -NoProfile -ExecutionPolicy Bypass -Command "foreach ($port in %BACKEND_PORT_START%..18120) { try { $r = Invoke-RestMethod -TimeoutSec 1 ('http://127.0.0.1:' + $port + '/api/checkout/capabilities'); if ($r.success -and $r.data.service -eq 'cnpc-promotion-retail' -and $r.data.apiVersion -eq 'checkout-v2' -and $r.data.calculate -and $r.data.confirm) { Write-Output $port; exit 0 } } catch {} }; exit 1" 2^>nul') do set "BACKEND_PORT=%%p"
+for /l %%p in (%BACKEND_PORT_START%,1,18120) do (
+  if not defined BACKEND_PORT (
+    netstat -ano | findstr /R /C:":%%p .*LISTENING" >nul 2>nul
+    if not errorlevel 1 (
+      call :backend_compatible %%p
+      if not errorlevel 1 set "BACKEND_PORT=%%p"
+    )
+  )
+)
 if defined BACKEND_PORT (
   set "REUSE_BACKEND=1"
   echo [INFO] Compatible checkout backend found on port !BACKEND_PORT!.
@@ -182,6 +191,8 @@ exit /b 0
 
 :backend_compatible
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:%1/api/checkout/capabilities'; if ($r.success -and $r.data.service -eq 'cnpc-promotion-retail' -and $r.data.apiVersion -eq 'checkout-v2' -and $r.data.calculate -and $r.data.confirm) { exit 0 } } catch {}; exit 1" >nul 2>nul
+if errorlevel 1 exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:%1/api/stations/%DEMO_STATION_CODE%'; if ($r.success -and $r.data.stationCode -eq '%DEMO_STATION_CODE%') { exit 0 } } catch {}; exit 1" >nul 2>nul
 exit /b %ERRORLEVEL%
 
 :cleanup_frontends
