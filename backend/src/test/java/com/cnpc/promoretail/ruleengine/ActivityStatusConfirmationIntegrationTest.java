@@ -53,10 +53,10 @@ class ActivityStatusConfirmationIntegrationTest extends PostgresIntegrationTestS
     void e2ConfirmedTierRequiresWholeCaseQuantity() {
         String ruleId = "abv2-e2-ilite-250-case-coupon";
         CalculationResult hit = calculate(List.of(rule(ruleId)), GAS_STATION, member(), FuelContext.empty(),
-                List.of(syntheticItem("70690981", "伊力特250ml", 10, "11.60", "酒类")),
+                List.of(syntheticItem("70690981", "伊力特250ml", 10, "68.00", "酒类")),
                 LocalDate.of(2026, 7, 11));
         CalculationResult below = calculate(List.of(rule(ruleId)), GAS_STATION, member(), FuelContext.empty(),
-                List.of(syntheticItem("70690981", "伊力特250ml", 9, "11.60", "酒类")),
+                List.of(syntheticItem("70690981", "伊力特250ml", 9, "68.00", "酒类")),
                 LocalDate.of(2026, 7, 11));
 
         assertThat(candidate(hit, ruleId).coupons()).singleElement()
@@ -97,10 +97,11 @@ class ActivityStatusConfirmationIntegrationTest extends PostgresIntegrationTestS
     }
 
     @Test
-    void h2HasTwelveConfirmedDatabaseRules() {
+    void h2HasEighteenConfirmedDatabaseRules() {
         assertThat(confirmedRules()).filteredOn(rule -> rule.ruleId().startsWith("abv2-h2-"))
-                .hasSize(12)
-                .allSatisfy(rule -> assertThat(rule.version()).isEqualTo("activity-board-v2"));
+                .hasSize(18)
+                .allSatisfy(rule -> assertThat(rule.version())
+                        .isIn("activity-board-v2", "activity-board-v2-focus"));
     }
 
     private CalculationResult calculate(

@@ -3,6 +3,7 @@ package com.cnpc.promoretail.checkout;
 import com.cnpc.promoretail.product.model.ProductCatalogItem;
 import com.cnpc.promoretail.product.repository.ProductCatalogRepository;
 import com.cnpc.promoretail.promotion.repository.PromotionRuleRepository;
+import com.cnpc.promoretail.ruleengine.bundle.BundleDefinitionProvider;
 import com.cnpc.promoretail.ruleengine.condition.ConditionMatcher;
 import com.cnpc.promoretail.ruleengine.condition.ConditionMatchResult;
 import com.cnpc.promoretail.ruleengine.context.CartItem;
@@ -30,15 +31,20 @@ public class CheckoutExchangeOfferService {
     private final PromotionRuleRepository promotionRuleRepository;
     private final ProductCatalogRepository productCatalogRepository;
     private final ConditionMatcher conditionMatcher;
+    private final BundleDefinitionProvider bundleDefinitionProvider;
 
     public CheckoutExchangeOfferService(
             PromotionRuleRepository promotionRuleRepository,
             ProductCatalogRepository productCatalogRepository,
-            ConditionMatcher conditionMatcher
+            ConditionMatcher conditionMatcher,
+            BundleDefinitionProvider bundleDefinitionProvider
     ) {
         this.promotionRuleRepository = promotionRuleRepository;
         this.productCatalogRepository = productCatalogRepository;
         this.conditionMatcher = conditionMatcher;
+        this.bundleDefinitionProvider = bundleDefinitionProvider == null
+                ? BundleDefinitionProvider.empty()
+                : bundleDefinitionProvider;
     }
 
     public List<CheckoutExchangeOfferResponse> findOffers(
@@ -53,14 +59,20 @@ public class CheckoutExchangeOfferService {
         LocalDate effectiveBusinessDate = businessDate == null ? LocalDate.now() : businessDate;
 
         List<PromotionRule> rules = promotionRuleRepository.findConfirmedRules().stream()
-                .filter(rule -> rule.ruleType() == PromotionRuleType.EXCHANGE_PURCHASE)
+                .filter(rule -> (rule.ruleType() == PromotionRuleType.EXCHANGE_PURCHASE
+                        && rule.ruleId().startsWith("abv2-h2-"))
+                        || (rule.ruleType() == PromotionRuleType.BUNDLE_PRICE
+                        && rule.ruleId().startsWith("abv2-bundle-")))
                 .toList();
         Map<String, ProductCatalogItem> products = productsByCode(rules);
 
         return rules.stream()
-                .flatMap(rule -> rule.condition().productCodes().stream()
-                        .map(productCode -> toOffer(rule, productCode, products.get(productCode), effectiveFuelType,
-                                effectiveFuelAmount, effectiveBusinessDate, stationType, stationProvince)))
+                .flatMap(rule -> rule.ruleType() == PromotionRuleType.BUNDLE_PRICE
+                        ? java.util.stream.Stream.of(toBundleOffer(rule, products, effectiveFuelType,
+                                effectiveFuelAmount, effectiveBusinessDate, stationType, stationProvince))
+                        : rule.condition().productCodes().stream()
+                                .map(productCode -> toOffer(rule, productCode, products.get(productCode), effectiveFuelType,
+                                        effectiveFuelAmount, effectiveBusinessDate, stationType, stationProvince)))
                 .sorted(Comparator.comparing(CheckoutExchangeOfferResponse::eligible).reversed()
                         .thenComparing(CheckoutExchangeOfferResponse::minFuelAmount)
                         .thenComparing(CheckoutExchangeOfferResponse::productCode))
@@ -124,6 +136,7 @@ public class CheckoutExchangeOfferService {
                 rule.ruleId(),
                 rule.activityName(),
                 rule.version(),
+                "ITEM",
                 productCode,
                 product == null ? productCode : product.productName(),
                 product == null ? null : product.barcode(),
@@ -136,7 +149,78 @@ public class CheckoutExchangeOfferService {
                 estimatedDiscount,
                 inventoryQuantity,
                 blockedReasons.isEmpty(),
-                List.copyOf(blockedReasons)
+                List.copyOf(blockedReasons),
+                List.of()
+        );
+    }
+
+    private CheckoutExchangeOfferResponse toBundleOffer(
+            PromotionRule rule,
+            Map<String, ProductCatalogItem> products,
+            FuelType fuelType,
+            BigDecimal fuelAmount,
+            LocalDate businessDate,
+            String stationType,
+            String stationProvince
+    ) {
+        List<String> blockedReasons = new ArrayList<>();
+        var definition = bundleDefinitionProvider.findActiveBundle(rule.benefit().bundleId()).orElse(null);
+        if (definition == null || definition.items().isEmpty()) {
+            blockedReasons.add("组合包配置缺失：" + rule.benefit().bundleId());
+        }
+
+        List<CheckoutExchangeOfferResponse.CheckoutExchangeOfferItem> items = new ArrayList<>();
+        BigDecimal originalPrice = BigDecimal.ZERO;
+        BigDecimal availableSets = null;
+        if (definition != null) {
+            for (var bundleItem : definition.items()) {
+                ProductCatalogItem product = products.get(bundleItem.productCode());
+                if (product == null) {
+                    blockedReasons.add("商品目录缺少组合包商品：" + bundleItem.productCode());
+                    continue;
+                }
+                BigDecimal inventory = product.inventoryQuantity() == null
+                        ? BigDecimal.ZERO
+                        : product.inventoryQuantity();
+                int quantity = bundleItem.quantity();
+                items.add(new CheckoutExchangeOfferResponse.CheckoutExchangeOfferItem(
+                        product.productCode(), product.productName(), product.barcode(), product.category(),
+                        money(product.unitPrice()), quantity, inventory));
+                originalPrice = originalPrice.add(money(product.unitPrice())
+                        .multiply(BigDecimal.valueOf(quantity)));
+                BigDecimal productSets = inventory.divide(BigDecimal.valueOf(quantity), 0, RoundingMode.DOWN);
+                availableSets = availableSets == null ? productSets : availableSets.min(productSets);
+                // A bundle is presented even when one item is temporarily short so the cashier can
+                // see the exact board rule and the reason it cannot be added right now.
+                if (inventory.compareTo(BigDecimal.valueOf(quantity)) < 0) {
+                    blockedReasons.add("组合包商品库存不足：" + product.productCode()
+                            + "，需要 " + quantity + " 件。");
+                }
+            }
+        }
+
+        BigDecimal minFuelAmount = definition == null
+                ? money(rule.condition().minFuelAmount())
+                : money(definition.thresholdAmount().max(rule.condition().minFuelAmount()));
+        if (!rule.condition().fuelTypes().isEmpty() && !rule.condition().fuelTypes().contains(fuelType)) {
+            blockedReasons.add("当前油品类型不满足活动要求。");
+        }
+        if (fuelAmount.compareTo(minFuelAmount) < 0) {
+            blockedReasons.add("当前油品消费金额未满 " + minFuelAmount.stripTrailingZeros().toPlainString() + " 元。");
+        }
+        BigDecimal exchangePrice = definition == null ? money(rule.benefit().bundlePrice()) : money(definition.bundlePrice());
+        BigDecimal estimatedDiscount = originalPrice.subtract(exchangePrice).max(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
+        if (estimatedDiscount.compareTo(BigDecimal.ZERO) <= 0) {
+            blockedReasons.add("组合包价未低于组合商品原价。");
+        }
+        return new CheckoutExchangeOfferResponse(
+                rule.ruleId(), rule.activityName(), rule.version(), "BUNDLE",
+                rule.benefit().bundleId(), definition == null ? rule.activityName() : definition.name(),
+                null, "组合包", originalPrice, exchangePrice,
+                1, minFuelAmount, rule.condition().fuelTypes().stream().sorted().toList(),
+                estimatedDiscount, availableSets == null ? BigDecimal.ZERO : availableSets,
+                blockedReasons.isEmpty(), List.copyOf(blockedReasons), List.copyOf(items)
         );
     }
 

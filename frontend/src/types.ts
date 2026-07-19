@@ -248,6 +248,7 @@ export type CheckoutExchangeOffer = {
   ruleId: string;
   activityName: string;
   ruleVersion: string;
+  offerType?: "ITEM" | "BUNDLE";
   productCode: string;
   productName: string;
   barcode?: string | null;
@@ -261,6 +262,15 @@ export type CheckoutExchangeOffer = {
   inventoryQuantity: number;
   eligible: boolean;
   blockedReasons: string[];
+  bundleItems?: {
+    productCode: string;
+    productName: string;
+    barcode?: string | null;
+    category?: string | null;
+    unitPrice: number;
+    quantity: number;
+    inventoryQuantity: number;
+  }[];
 };
 
 export type OperationCampaignDefinition = {
@@ -451,10 +461,16 @@ export type PromotionRule = {
   condition: {
     productCodes: string[];
     excludedCategories: string[];
+    includedCategories?: string[];
+    fuelTypes?: string[];
+    daysOfMonth?: number[];
+    startDate?: string | null;
+    endDate?: string | null;
     minCartAmount: number;
     minFuelAmount: number;
     memberRequired: boolean;
     minInventoryQuantity: number;
+    minProductQuantity?: number;
   };
   benefit: {
     type: string;
@@ -474,7 +490,8 @@ export type PromotionRule = {
     bundleId?: string | null;
     bundleItems: { productCode: string; quantity: number }[];
     bundlePrice: number;
-  };
+    giftItemOptions?: { productCode: string; name: string; quantity: number }[][];
+    };
   version: string;
 };
 

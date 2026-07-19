@@ -267,7 +267,13 @@ class FlywayMigrationTest {
                     from import_error_row
                     where import_version = 'activity-board-v2-99-zone-full-import'
                       and error_code = 'MISSING_PRODUCT_CODE'
-                    """)).isEqualTo(4);
+                    """)).isZero();
+            assertThat(count(statement, """
+                    select count(*)
+                    from promotion_rule_draft
+                    where rule_id like 'abv2-99-zone-%'
+                      and status = 'CONFIRMED'
+                    """)).isEqualTo(194);
             assertThat(count(statement, """
                     select count(*)
                     from coupon_template

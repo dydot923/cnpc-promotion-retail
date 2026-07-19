@@ -37,7 +37,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { calculateCheckout, confirmCheckout, fetchExchangeOffers } from "../api/checkout";
-import { fetchProductByBarcode, searchProducts } from "../api/products";
+import { fetchProductByBarcode, fetchProductByCode, searchProducts } from "../api/products";
 import { fetchStations } from "../api/stations";
 import EmptyState from "../components/EmptyState";
 import Price from "../components/Price";
@@ -594,6 +594,12 @@ const memberLevelOptions = [
 export default function CheckoutPage() {
   const [searchParams] = useSearchParams();
   const requestedDemoKey = searchParams.get("demo") || undefined;
+  const requestedProductCode = searchParams.get("product") || undefined;
+  const requestedProductQuantity = Math.max(Number(searchParams.get("quantity") || 1), 1);
+  const requestedProductRequest = requestedProductCode
+    ? `${requestedProductCode}:${requestedProductQuantity}`
+    : undefined;
+  const requestedMode = searchParams.get("mode") as CheckoutMode | null;
   const [productForm] = Form.useForm<ProductForm>();
   const [fuelForm] = Form.useForm<FuelForm>();
   const [customerForm] = Form.useForm<CustomerForm>();
@@ -602,6 +608,8 @@ export default function CheckoutPage() {
   const [barcode, setBarcode] = useState("");
   const [mode, setMode] = useState<CheckoutMode>("shop");
   const [loadedDemoKey, setLoadedDemoKey] = useState<string>();
+  const [loadedProductRequest, setLoadedProductRequest] = useState<string>();
+  const [loadedModeRequest, setLoadedModeRequest] = useState<string>();
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>();
   const [latestConfirmationId, setLatestConfirmationId] = useState<string>();
   const [api, contextHolder] = message.useMessage();
@@ -750,6 +758,40 @@ export default function CheckoutPage() {
   }, [loadedDemoKey, requestedDemoKey]);
 
   useEffect(() => {
+    if (!requestedProductCode || requestedProductRequest === loadedProductRequest) {
+      return;
+    }
+    setLoadedProductRequest(requestedProductRequest);
+    fetchProductByCode(requestedProductCode)
+      .then((product) => {
+        setMode("shop");
+        setLoadedDemoKey(undefined);
+        setCartItems([]);
+        fillProductForm(product, requestedProductQuantity);
+        addOrIncrementProduct(product, requestedProductQuantity);
+        api.success(`已按专区规则装载：${product.productName} x ${requestedProductQuantity}`);
+      })
+      .catch((error) => api.error(error instanceof Error ? error.message : "商品装载失败"));
+  }, [loadedProductRequest, requestedProductCode, requestedProductQuantity, requestedProductRequest]);
+
+  useEffect(() => {
+    const requestKey = requestedMode ? searchParams.toString() : undefined;
+    if (!requestedMode || !["shop", "fuel", "exchange", "coupon"].includes(requestedMode) || requestKey === loadedModeRequest) {
+      return;
+    }
+    setLoadedModeRequest(requestKey);
+    applyMode(requestedMode);
+    if (requestedMode === "exchange" || requestedMode === "fuel") {
+      fuelForm.setFieldsValue(fuel(
+        (searchParams.get("fuelType") as FuelType) || "GASOLINE",
+        searchParams.get("fuelGrade") || "92",
+        Number(searchParams.get("fuelAmount") || 0),
+        0
+      ));
+    }
+  }, [loadedModeRequest, requestedMode, searchParams]);
+
+  useEffect(() => {
     if (result) {
       setSelectedCandidateId(recommended?.candidateId || result.originalPriceFallback.candidateId);
       setLatestConfirmationId(undefined);
@@ -842,24 +884,24 @@ export default function CheckoutPage() {
     productLookupMutation.mutate(value);
   }
 
-  function fillProductForm(product: ProductCatalogItem) {
+  function fillProductForm(product: ProductCatalogItem, quantity = 1) {
     productForm.setFieldsValue({
       productCode: product.productCode,
       barcode: product.barcode || "",
       name: product.productName,
       unitPrice: Number(product.unitPrice || 0),
-      quantity: 1,
+      quantity,
       category: product.category || ""
     });
   }
 
-  function addOrIncrementProduct(product: ProductCatalogItem) {
+  function addOrIncrementProduct(product: ProductCatalogItem, quantity = 1) {
     resetCalculation();
     setCartItems((items) => {
       const existing = items.find((cartItem) => cartItem.productCode === product.productCode);
       if (existing) {
         return items.map((cartItem) =>
-          cartItem.productCode === product.productCode ? { ...cartItem, quantity: cartItem.quantity + 1 } : cartItem
+          cartItem.productCode === product.productCode ? { ...cartItem, quantity: cartItem.quantity + quantity } : cartItem
         );
       }
       return [
@@ -869,7 +911,7 @@ export default function CheckoutPage() {
           productCode: product.productCode,
           barcode: product.barcode || null,
           name: product.productName,
-          quantity: 1,
+          quantity,
           unitPrice: Number(product.unitPrice || 0),
           category: product.category || null,
           inventoryQuantity: Number(product.inventoryQuantity || 0)
@@ -893,6 +935,35 @@ export default function CheckoutPage() {
       return;
     }
     resetCalculation();
+    const bundleItems = offer.bundleItems || [];
+    if (offer.offerType === "BUNDLE" && bundleItems.length) {
+      setCartItems((items) => {
+        const next = [...items];
+        for (const bundleItem of bundleItems) {
+          const existingIndex = next.findIndex((cartItem) => cartItem.productCode === bundleItem.productCode);
+          if (existingIndex >= 0) {
+            next[existingIndex] = {
+              ...next[existingIndex],
+              quantity: Math.max(next[existingIndex].quantity, bundleItem.quantity)
+            };
+          } else {
+            next.push({
+              lineId: `line-${offer.ruleId}-${bundleItem.productCode}-${Date.now()}`,
+              productCode: bundleItem.productCode,
+              barcode: bundleItem.barcode || null,
+              name: bundleItem.productName,
+              quantity: bundleItem.quantity,
+              unitPrice: Number(bundleItem.unitPrice || 0),
+              category: bundleItem.category || null,
+              inventoryQuantity: Number(bundleItem.inventoryQuantity || 0)
+            });
+          }
+        }
+        return next;
+      });
+      api.success(`已加入组合包：${offer.productName}`);
+      return;
+    }
     setCartItems((items) => {
       const existing = items.find((cartItem) => cartItem.productCode === offer.productCode);
       if (existing) {
@@ -1923,7 +1994,7 @@ function ExchangeOfferPanel({
               <Space direction="vertical" size={2}>
                 <Typography.Text strong>{offer.productName}</Typography.Text>
                 <Typography.Text type="secondary">
-                  {offer.productCode} / {offer.activityName}
+                  {offer.offerType === "BUNDLE" ? "组合包" : offer.productCode} / {offer.activityName}
                 </Typography.Text>
               </Space>
               <Tag color={offer.eligible ? "green" : "orange"}>{offer.eligible ? "可加入" : "未满足"}</Tag>
@@ -1933,9 +2004,13 @@ function ExchangeOfferPanel({
                 油品满 <Price amount={offer.minFuelAmount} size="small" />
               </span>
               <span>
-                原价 <Price amount={offer.unitPrice} size="small" /> / 换购 <Price amount={offer.exchangePrice} size="small" />
+                {offer.offerType === "BUNDLE" ? (
+                  <>组合原价 <Price amount={offer.unitPrice} size="small" /> / 组合价 <Price amount={offer.exchangePrice} size="small" /></>
+                ) : (
+                  <>原价 <Price amount={offer.unitPrice} size="small" /> / 换购 <Price amount={offer.exchangePrice} size="small" /></>
+                )}
               </span>
-              <span>数量 {offer.exchangeQuantity}</span>
+              <span>{offer.offerType === "BUNDLE" ? `组合商品 ${offer.bundleItems?.length || 0} 类` : `数量 ${offer.exchangeQuantity}`}</span>
               <span>库存 {Number(offer.inventoryQuantity || 0)}</span>
               <span>
                 预计优惠 <Price amount={offer.estimatedDiscount} size="small" />
@@ -1947,7 +2022,7 @@ function ExchangeOfferPanel({
               </Typography.Text>
             ) : null}
             <Button type={offer.eligible ? "primary" : "default"} disabled={!offer.eligible} onClick={() => onAdd(offer)}>
-              加入换购
+              {offer.offerType === "BUNDLE" ? "加入组合" : "加入换购"}
             </Button>
           </div>
         ))}

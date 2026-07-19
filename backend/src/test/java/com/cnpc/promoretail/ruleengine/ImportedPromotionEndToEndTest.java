@@ -53,7 +53,8 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
                     GAS_STATION,
                     CustomerContext.anonymous(),
                     FuelContext.empty(),
-                    List.of(item(product, 1, new BigDecimal("19.90"))),
+                    List.of(item(product, Math.max(rule.condition().minProductQuantity(), 1),
+                            new BigDecimal("19.90"))),
                     LocalDate.of(2026, 7, 9),
                     DAYTIME,
                     List.of()
@@ -148,11 +149,11 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
         assertThat(candidatesByRule(cigarette200, "abv2-g6-cigarette-200-gift-choice")).hasSize(2)
                 .allSatisfy(candidate -> assertThat(candidate.explanation()).isNotBlank());
 
-        CalculationResult store36 = calculate(order(
+        CalculationResult store40 = calculate(order(
                 GAS_STATION, CustomerContext.anonymous(), FuelContext.empty(),
-                List.of(syntheticItem("70356177", "red bull", 6, "6.00", "包装饮料")),
+                List.of(syntheticItem("70356177", "red bull", 7, "6.00", "包装饮料")),
                 LocalDate.of(2026, 7, 9), DAYTIME, List.of()));
-        assertThat(candidatesByRule(store36, "abv2-g6-store-36-gift-choice")).hasSize(2);
+        assertThat(candidatesByRule(store40, "abv2-g6-store-36-gift-choice")).hasSize(2);
 
         CalculationResult cottonFilm = calculate(order(
                 GAS_STATION, CustomerContext.anonymous(), FuelContext.empty(),
@@ -169,7 +170,7 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
         assertThat(candidate(ilite, "abv2-g6-ilite-250-fixed").payableAmount())
                 .isEqualByComparingTo("116.00");
         assertThat(candidate(ilite, "abv2-g6-ilite-250-coupon").coupons())
-                .singleElement().satisfies(gift -> assertThat(gift.amount()).isEqualByComparingTo("12.00"));
+                .singleElement().satisfies(gift -> assertThat(gift.amount()).isEqualByComparingTo("16.00"));
 
         CalculationResult wingCard = calculate(order(
                 GAS_STATION, new CustomerContext(true, "GOLD", List.of()), FuelContext.empty(),

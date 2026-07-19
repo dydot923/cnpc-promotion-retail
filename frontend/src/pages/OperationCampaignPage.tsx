@@ -15,6 +15,7 @@ import {
   issueOperationCampaignCoupon,
   type OperationCampaignPayload
 } from "../api/operationCampaigns";
+import { fetchRuleDrafts } from "../api/rules";
 import EmptyState from "../components/EmptyState";
 import Price from "../components/Price";
 import type {
@@ -24,6 +25,7 @@ import type {
   MemberCouponListResponse,
   OperationCampaignDefinition,
   OperationCouponIssueResponse,
+  PromotionRuleDraft,
   PointsExchangeResponse,
   PointsLotteryDrawResponse
 } from "../types";
@@ -402,27 +404,227 @@ export default function OperationCampaignPage() {
 }
 
 function CheckoutAcceptanceCatalog() {
+  const [zoneSearch, setZoneSearch] = useState("");
+  const rulesQuery = useQuery({
+    queryKey: ["priority-activity-rules"],
+    queryFn: () => fetchRuleDrafts("CONFIRMED"),
+    staleTime: 30_000
+  });
+  const focusedRules = useMemo(() => {
+    const all = rulesQuery.data || [];
+    const zone = all
+      .filter(({ rule }) => rule.ruleId.startsWith("abv2-99-zone-"))
+      .sort(bySourceRow);
+    const exchange = all
+      .filter(({ rule, sourceSheetName }) => sourceSheetName === "加油换购（统建）"
+        || rule.ruleId.startsWith("abv2-h2-")
+        || rule.ruleId.startsWith("abv2-bundle-abv2-"))
+      .sort(bySourceRow);
+    const nonOil = all
+      .filter(({ rule, sourceSheetName }) => sourceSheetName === "非非促销（统建）"
+        || /^(abv2-(g1|g2|g4|g5|g6|e2)-)/.test(rule.ruleId))
+      .filter(({ rule }) => !rule.ruleId.startsWith("abv2-99-zone-"))
+      .sort(bySourceRow);
+    return { zone, exchange, nonOil };
+  }, [rulesQuery.data]);
+  const visibleZoneRules = useMemo(() => {
+    const keyword = zoneSearch.trim().toLowerCase();
+    if (!keyword) return focusedRules.zone;
+    return focusedRules.zone.filter(({ rule }) => {
+      const productCode = rule.condition.productCodes[0] || "";
+      return productCode.toLowerCase().includes(keyword) || rule.activityName.toLowerCase().includes(keyword);
+    });
+  }, [focusedRules.zone, zoneSearch]);
+
+  const activityColumns: ColumnsType<PromotionRuleDraft> = [
+    {
+      title: "活动",
+      dataIndex: ["rule", "activityName"],
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{record.rule.activityName}</Typography.Text>
+          <Typography.Text type="secondary">源表第 {record.sourceRowNumber} 行</Typography.Text>
+        </Space>
+      )
+    },
+    { title: "规则类型", width: 124, render: (_, record) => <Tag>{ruleTypeLabel(record.rule.ruleType)}</Tag> },
+    { title: "执行条件", width: 220, render: (_, record) => conditionText(record) },
+    { title: "优惠结果", width: 220, render: (_, record) => benefitText(record) },
+    {
+      title: "验收",
+      width: 112,
+      render: (_, record) => {
+        const demo = demoForRule(record.rule.ruleId);
+        return demo ? <Button type="primary" href={`/checkout?demo=${demo}`}>去实操</Button> : <Tag color="green">已发布</Tag>;
+      }
+    }
+  ];
+
+  const zoneColumns: ColumnsType<PromotionRuleDraft> = [
+    {
+      title: "商品",
+      render: (_, record) => (
+        <Space direction="vertical" size={0}>
+          <Typography.Text strong>{record.rule.activityName.replace(/^9\.9元商品专区-/, "")}</Typography.Text>
+          <Typography.Text type="secondary">{record.rule.condition.productCodes[0]}</Typography.Text>
+        </Space>
+      )
+    },
+    {
+      title: "促销包价",
+      width: 140,
+      render: (_, record) => {
+        const quantity = Math.max(record.rule.condition.minProductQuantity || 1, 1);
+        return <Typography.Text strong>{quantity > 1 ? `${quantity}件 / 9.9元` : "1件 / 9.9元"}</Typography.Text>;
+      }
+    },
+    { title: "状态", width: 90, render: () => <Tag color="green">可结算</Tag> },
+    {
+      title: "验收",
+      width: 112,
+      render: (_, record) => {
+        const quantity = Math.max(record.rule.condition.minProductQuantity || 1, 1);
+        return (
+          <Button type="primary" href={`/checkout?product=${encodeURIComponent(record.rule.condition.productCodes[0])}&quantity=${quantity}`}>
+            装载{quantity}件
+          </Button>
+        );
+      }
+    }
+  ];
+
   return (
     <section className="panel acceptance-catalog">
       <Space className="panel-toolbar" align="start">
         <div>
-          <Typography.Title level={3} className="section-title">收银促销逐项入口</Typography.Title>
-          <Typography.Text type="secondary">点击后自动装载商品、油品、日期、会员等级与充值金额，再点击“一键计算促销”。</Typography.Text>
+          <Typography.Title level={3} className="section-title">重点促销验收</Typography.Title>
+          <Typography.Text type="secondary">仅聚焦加油换购、非非促销和9.9元专区，数据来自已确认结算规则。</Typography.Text>
         </div>
         <ShoppingCartOutlined className="panel-icon" />
       </Space>
-      {checkoutScenarioGroups.map((group) => (
-        <div className="acceptance-group" key={group.title}>
-          <Typography.Title level={4}>{group.title}</Typography.Title>
-          <div className="acceptance-button-grid">
-            {group.scenarios.map(([key, label]) => (
-              <Button key={key} href={`/checkout?demo=${key}`}>{label}</Button>
-            ))}
-          </div>
+      <Space wrap className="focus-rule-summary">
+        <Tag color="blue">加油换购 {focusedRules.exchange.length} 条</Tag>
+        <Tag color="green">非非促销 {focusedRules.nonOil.length} 条</Tag>
+        <Tag color="gold">9.9专区 {focusedRules.zone.length} 个商品</Tag>
+      </Space>
+      {rulesQuery.error ? <Alert type="error" showIcon message="重点规则加载失败" description={rulesQuery.error.message} /> : null}
+      <Tabs
+        defaultActiveKey="exchange"
+        items={[
+          {
+            key: "exchange",
+            label: "加油换购",
+            children: (
+              <Space direction="vertical" size={16} className="full-width">
+                <Alert
+                  type="info"
+                  showIcon
+                  message="先录油品金额，再选组合包或单品"
+                  description="组合包和单品换购已合并到同一清单；汽油180/200元、柴油300/500元门槛会自动判断。"
+                  action={<Button type="primary" href="/checkout?mode=exchange&fuelType=GASOLINE&fuelAmount=500">打开完整换购清单</Button>}
+                />
+                <Table rowKey="draftId" size="small" loading={rulesQuery.isLoading} columns={activityColumns}
+                  dataSource={focusedRules.exchange} pagination={{ pageSize: 12, showSizeChanger: false }} scroll={{ x: 920 }} />
+              </Space>
+            )
+          },
+          {
+            key: "non-oil",
+            label: "非非促销",
+            children: (
+              <Table rowKey="draftId" size="small" loading={rulesQuery.isLoading} columns={activityColumns}
+                dataSource={focusedRules.nonOil} pagination={{ pageSize: 12, showSizeChanger: false }} scroll={{ x: 920 }} />
+            )
+          },
+          {
+            key: "zone99",
+            label: "9.9元专区",
+            children: (
+              <Space direction="vertical" size={12} className="full-width">
+                <Alert
+                  type="warning"
+                  showIcon
+                  message={`${focusedRules.zone.length}个专区条目已可搜索、装载和结算`}
+                  description="源表最后4行没有商品编码，系统已保留原活动名称，并映射到价格主档中的真实商品编码；验收表中可按源表行号追溯。"
+                />
+                <Input.Search value={zoneSearch} onChange={(event) => setZoneSearch(event.target.value)}
+                  allowClear placeholder="搜索商品名称或商品编码" />
+                <Table rowKey="draftId" size="small" loading={rulesQuery.isLoading} columns={zoneColumns}
+                  dataSource={visibleZoneRules} pagination={{ pageSize: 15, showSizeChanger: false, showTotal: (total) => `共 ${total} 个商品` }} />
+              </Space>
+            )
+          }
+        ]}
+      />
+
+      <div className="acceptance-group">
+        <Typography.Title level={4}>常用实操场景</Typography.Title>
+        <div className="acceptance-button-grid">
+          {checkoutScenarioGroups.slice(1).map((group) => group.scenarios.map(([key, label]) => (
+            <Button key={key} href={`/checkout?demo=${key}`}>{label}</Button>
+          )))}
         </div>
-      ))}
+      </div>
     </section>
   );
+}
+
+function bySourceRow(left: PromotionRuleDraft, right: PromotionRuleDraft) {
+  return left.sourceRowNumber - right.sourceRowNumber || left.rule.activityName.localeCompare(right.rule.activityName, "zh-CN");
+}
+
+function ruleTypeLabel(type: string) {
+  return ({
+    FIXED_PRICE: "固定价",
+    PERCENTAGE_DISCOUNT: "折扣",
+    GIFT_ITEM: "买赠",
+    GIFT_COUPON: "赠券",
+    EXCHANGE_PURCHASE: "单品换购",
+    BUNDLE_PRICE: "组合换购",
+    COMPOSITE: "组合优惠"
+  } as Record<string, string>)[type] || type;
+}
+
+function conditionText({ rule }: PromotionRuleDraft) {
+  const parts: string[] = [];
+  if (Number(rule.condition.minFuelAmount || 0) > 0) parts.push(`油品满${rule.condition.minFuelAmount}元`);
+  if (Number(rule.condition.minCartAmount || 0) > 0) parts.push(`商品满${rule.condition.minCartAmount}元`);
+  if (Number(rule.condition.minProductQuantity || 0) > 0) parts.push(`满${rule.condition.minProductQuantity}件`);
+  if (rule.condition.memberRequired) parts.push("会员");
+  if (rule.condition.daysOfMonth?.length) parts.push(`每月${rule.condition.daysOfMonth.join("/")}日`);
+  return parts.join("，") || "购买指定商品";
+}
+
+function benefitText({ rule }: PromotionRuleDraft) {
+  const benefit = rule.benefit;
+  switch (rule.ruleType) {
+    case "FIXED_PRICE": {
+      const packageQuantity = Math.max(rule.condition.minProductQuantity || 1, 1);
+      return packageQuantity > 1
+        ? `满${packageQuantity}件${benefit.fixedPrice}元/组`
+        : `每件${benefit.fixedPrice}元`;
+    }
+    case "PERCENTAGE_DISCOUNT": return `${Number(benefit.discountRate || 0) * 10}折`;
+    case "EXCHANGE_PURCHASE": return `${benefit.exchangePrice}元换购${benefit.exchangeQuantity || 1}件`;
+    case "BUNDLE_PRICE": return "组合包25元换购";
+    case "GIFT_COUPON": return `${benefit.giftCouponAmount || "多档"}元券 x ${benefit.giftCouponQuantity || 1}`;
+    case "GIFT_ITEM": return benefit.giftItemName || "赠指定商品/可选赠品";
+    default: return rule.activityName;
+  }
+}
+
+function demoForRule(ruleId: string) {
+  const pairs: [RegExp, string][] = [
+    [/g1-/, "g1"], [/g2-/, "g2"], [/g4-/, "g4"], [/g5-/, "g5"],
+    [/g6-ilite-250/, "g6-ilite-250"], [/g6-ilite-500-jia/, "g6-ilite-500-jia"],
+    [/g6-ilite-500-li/, "g6-ilite-500-li"], [/g6-cigarette-200/, "g6-cigarette-200"],
+    [/g6-cigarette-555/, "g6-cigarette-555"], [/g6-cigarette-888/, "g6-cigarette-888"],
+    [/g6-store-/, "g6-store-gift"], [/g6-cotton-/, "g6-cotton-film"],
+    [/e2-wing-card/, "e2-wing-card"], [/e2-ilite-250/, "e2"],
+    [/e2-ilite-500-jia/, "e2-ilite-500-jia"], [/e2-ilite-500-li/, "e2-ilite-500-li"],
+    [/bundle-abv2-driving/, "h1"], [/h2-/, "h2"]
+  ];
+  return pairs.find(([pattern]) => pattern.test(ruleId))?.[1];
 }
 
 type LifecycleForm = {

@@ -8,6 +8,7 @@ public record CheckoutExchangeOfferResponse(
         String ruleId,
         String activityName,
         String ruleVersion,
+        String offerType,
         String productCode,
         String productName,
         String barcode,
@@ -20,6 +21,18 @@ public record CheckoutExchangeOfferResponse(
         BigDecimal estimatedDiscount,
         BigDecimal inventoryQuantity,
         boolean eligible,
-        List<String> blockedReasons
+        List<String> blockedReasons,
+        List<CheckoutExchangeOfferItem> bundleItems
 ) {
+
+    public record CheckoutExchangeOfferItem(
+            String productCode,
+            String productName,
+            String barcode,
+            String category,
+            BigDecimal unitPrice,
+            int quantity,
+            BigDecimal inventoryQuantity
+    ) {
+    }
 }
