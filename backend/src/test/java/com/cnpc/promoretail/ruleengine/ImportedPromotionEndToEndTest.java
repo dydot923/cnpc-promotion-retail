@@ -71,6 +71,26 @@ class ImportedPromotionEndToEndTest extends PostgresIntegrationTestSupport {
     }
 
     @Test
+    void nonOilBoardDongpengThreePackCalculatesAtNineYuan() {
+        ProductCatalogItem dongpeng = productCatalogRepository.findByProductCode("70235652").orElseThrow();
+        assertThat(dongpeng.productName()).contains("东鹏").contains("250");
+
+        CalculationResult result = calculate(order(
+                GAS_STATION,
+                CustomerContext.anonymous(),
+                FuelContext.empty(),
+                List.of(item(dongpeng, 3)),
+                LocalDate.of(2026, 7, 19),
+                DAYTIME,
+                List.of()
+        ));
+
+        PromotionCandidate candidate = candidate(result, "abv2-nono-energy-dongpeng-250-pack3");
+        assertThat(candidate.payableAmount()).isEqualByComparingTo("9.00");
+        assertThat(candidate.explanation()).contains("满3件按9.00元/组");
+    }
+
+    @Test
     void provinceCouponProducesHalfPriceCandidateForThreeImportedSkuAndBlocksNonMember() {
         Coupon coupon = couponRepository.findByCouponId("demo-province-half-001").orElseThrow();
         List<String> productCodes = coupon.applicableProductCodes().stream().limit(3).toList();

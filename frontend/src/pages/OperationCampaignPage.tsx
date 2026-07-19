@@ -599,7 +599,8 @@ function benefitText({ rule }: PromotionRuleDraft) {
   const benefit = rule.benefit;
   switch (rule.ruleType) {
     case "FIXED_PRICE": {
-      const packageQuantity = Math.max(rule.condition.minProductQuantity || 1, 1);
+      const packagePrice = rule.ruleId.startsWith("abv2-99-zone-") || rule.exclusiveGroup === "board_pack_price";
+      const packageQuantity = packagePrice ? Math.max(rule.condition.minProductQuantity || 1, 1) : 1;
       return packageQuantity > 1
         ? `满${packageQuantity}件${benefit.fixedPrice}元/组`
         : `每件${benefit.fixedPrice}元`;

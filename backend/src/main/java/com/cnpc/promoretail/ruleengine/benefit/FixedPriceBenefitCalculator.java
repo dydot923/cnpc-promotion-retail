@@ -23,7 +23,9 @@ public class FixedPriceBenefitCalculator extends AbstractBenefitCalculator {
         }
 
         BigDecimal fixedPrice = money(rule.benefit().fixedPrice());
-        int packageQuantity = rule.ruleId().startsWith("abv2-99-zone-")
+        boolean packagePrice = rule.ruleId().startsWith("abv2-99-zone-")
+                || "board_pack_price".equals(rule.exclusiveGroup());
+        int packageQuantity = packagePrice
                 ? Math.max(rule.condition().minProductQuantity(), 1)
                 : 1;
         BigDecimal discount = items.stream()

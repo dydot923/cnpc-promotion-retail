@@ -97,9 +97,9 @@ class ActivityStatusConfirmationIntegrationTest extends PostgresIntegrationTestS
     }
 
     @Test
-    void h2HasEighteenConfirmedDatabaseRules() {
+    void h2HasTwentyConfirmedDatabaseRulesIncludingBoardVariants() {
         assertThat(confirmedRules()).filteredOn(rule -> rule.ruleId().startsWith("abv2-h2-"))
-                .hasSize(18)
+                .hasSize(20)
                 .allSatisfy(rule -> assertThat(rule.version())
                         .isIn("activity-board-v2", "activity-board-v2-focus"));
     }

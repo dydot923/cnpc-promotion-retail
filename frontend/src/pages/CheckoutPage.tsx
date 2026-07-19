@@ -864,7 +864,8 @@ export default function CheckoutPage() {
   function applyMode(nextMode: CheckoutMode) {
     setLoadedDemoKey(undefined);
     setMode(nextMode);
-    if ((nextMode === "fuel" || nextMode === "exchange") && fuelForm.getFieldValue("fuelType") === "NONE") {
+    if ((nextMode === "fuel" || nextMode === "exchange")
+      && (!fuelForm.getFieldValue("fuelType") || fuelForm.getFieldValue("fuelType") === "NONE")) {
       fuelForm.setFieldsValue(fuel("GASOLINE", "92", 0, 0));
     }
     if (nextMode === "coupon") {
@@ -1235,6 +1236,46 @@ export default function CheckoutPage() {
 
             <ModeContext mode={mode} />
 
+            {mode === "fuel" || mode === "exchange" ? (
+              <div className="fuel-quick-panel">
+                <div className="fuel-quick-header">
+                  <div>
+                    <Typography.Text strong>油品快捷录入</Typography.Text>
+                    <Typography.Text type="secondary">油品金额和类型就在当前操作区，换购门槛会立即刷新。</Typography.Text>
+                  </div>
+                  <Tag color={mode === "exchange" ? "orange" : "blue"}>
+                    {mode === "exchange" ? "正在选择换购" : "正在录入加油"}
+                  </Tag>
+                </div>
+                <Form<FuelForm> form={fuelForm} layout="inline" className="fuel-quick-form" initialValues={fuel()}>
+                  <Form.Item label="油品类型" name="fuelType">
+                    <Select style={{ width: 140 }} options={fuelTypeOptions} />
+                  </Form.Item>
+                  <Form.Item label="油品牌号" name="fuelGrade">
+                    <Input style={{ width: 112 }} />
+                  </Form.Item>
+                  <Form.Item label="油品金额" name="amount">
+                    <InputNumber min={0} precision={2} style={{ width: 140 }} />
+                  </Form.Item>
+                  <Form.Item label="油品升数" name="volume">
+                    <InputNumber min={0} precision={2} style={{ width: 140 }} />
+                  </Form.Item>
+                </Form>
+                <Space wrap>
+                  {mode === "fuel" ? (
+                    <Button type="primary" icon={<SwapOutlined />} onClick={() => applyMode("exchange")}>
+                      查看可换购商品
+                    </Button>
+                  ) : (
+                    <Button icon={<CarOutlined />} onClick={() => applyMode("fuel")}>
+                      返回加油站
+                    </Button>
+                  )}
+                  <Typography.Text type="secondary">填写金额后，下面会直接显示对应油品的换购活动。</Typography.Text>
+                </Space>
+              </div>
+            ) : null}
+
             {mode === "exchange" ? (
               <ExchangeOfferPanel
                 offers={exchangeOffersQuery.data || []}
@@ -1379,22 +1420,24 @@ export default function CheckoutPage() {
                   </Form.Item>
                 </Space>
               </Form>
-              <Form<FuelForm> form={fuelForm} layout="vertical" initialValues={fuel()}>
-                <Space size={10} align="start" wrap>
-                  <Form.Item label="油品类型" name="fuelType">
-                    <Select style={{ width: 132 }} options={fuelTypeOptions} />
-                  </Form.Item>
-                  <Form.Item label="油品牌号" name="fuelGrade">
-                    <Input style={{ width: 104 }} />
-                  </Form.Item>
-                  <Form.Item label="油品金额" name="amount">
-                    <InputNumber min={0} precision={2} style={{ width: 126 }} />
-                  </Form.Item>
-                  <Form.Item label="油品升数" name="volume">
-                    <InputNumber min={0} precision={2} style={{ width: 126 }} />
-                  </Form.Item>
-                </Space>
-              </Form>
+              {mode !== "fuel" && mode !== "exchange" ? (
+                <Form<FuelForm> form={fuelForm} layout="vertical" initialValues={fuel()}>
+                  <Space size={10} align="start" wrap>
+                    <Form.Item label="油品类型" name="fuelType">
+                      <Select style={{ width: 132 }} options={fuelTypeOptions} />
+                    </Form.Item>
+                    <Form.Item label="油品牌号" name="fuelGrade">
+                      <Input style={{ width: 104 }} />
+                    </Form.Item>
+                    <Form.Item label="油品金额" name="amount">
+                      <InputNumber min={0} precision={2} style={{ width: 126 }} />
+                    </Form.Item>
+                    <Form.Item label="油品升数" name="volume">
+                      <InputNumber min={0} precision={2} style={{ width: 126 }} />
+                    </Form.Item>
+                  </Space>
+                </Form>
+              ) : null}
             </div>
 
             <Collapse
