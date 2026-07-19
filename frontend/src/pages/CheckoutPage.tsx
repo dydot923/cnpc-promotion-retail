@@ -2,6 +2,7 @@ import {
   CarOutlined,
   CheckCircleOutlined,
   DeleteOutlined,
+  FilterOutlined,
   GiftOutlined,
   PlusOutlined,
   PrinterOutlined,
@@ -26,6 +27,7 @@ import {
   InputNumber,
   Select,
   Space,
+  Switch,
   Table,
   Tag,
   Typography,
@@ -1135,14 +1137,14 @@ export default function CheckoutPage() {
       <div className="checkout-grid">
         <div className="checkout-column">
           <section className="panel scan-panel">
-            <Space className="panel-toolbar" align="center">
+            <Space className="panel-toolbar cashier-topbar" align="center" wrap>
               <div>
                 <Typography.Title level={3} className="section-title">
                   商品录入
                 </Typography.Title>
                 <Typography.Text type="secondary">当前 {cartCount} 件，合计 <Price amount={cartTotal} size="small" /></Typography.Text>
               </div>
-              <Space>
+              <Space className="cashier-primary-actions" wrap>
                 <Button icon={<ReloadOutlined />} onClick={startNewCheckout}>
                   新订单
                 </Button>
@@ -1164,6 +1166,7 @@ export default function CheckoutPage() {
                 ref={barcodeInputRef}
                 size="large"
                 value={barcode}
+                allowClear
                 placeholder="扫描条码，或输入商品名称、商品编码"
                 onChange={(event) => {
                   setBarcode(event.target.value);
@@ -1987,8 +1990,8 @@ function StepPill({ index, title, active, done }: { index: number; title: string
 function ModeContext({ mode }: { mode: CheckoutMode }) {
   const content: Record<CheckoutMode, { title: string; detail: string }> = {
     shop: { title: "便利店商品", detail: "扫码或搜索商品，计算满减、固定价、赠品与赠券" },
-    fuel: { title: "加油站", detail: "在业务信息中录入油品类型、金额和升数" },
-    exchange: { title: "加油换购", detail: "录入油品金额后，从可换购商品中选择符合条件的商品" },
+    fuel: { title: "加油站", detail: "在上方快捷区录入油品类型、金额和升数" },
+    exchange: { title: "加油换购", detail: "先在上方快捷区录入油品金额，再选择可换购商品" },
     coupon: { title: "用券结算", detail: "录入会员和优惠券信息，系统自动核对可用范围与叠加条件" }
   };
   return (
@@ -2010,28 +2013,79 @@ function ExchangeOfferPanel({
   error?: string;
   onAdd: (offer: CheckoutExchangeOffer) => void;
 }) {
+  const [onlyEligible, setOnlyEligible] = useState(true);
+  const [query, setQuery] = useState("");
   const eligibleCount = offers.filter((offer) => offer.eligible).length;
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const visibleOffers = useMemo(() => {
+    return [...offers]
+      .filter((offer) => !onlyEligible || offer.eligible)
+      .filter((offer) => {
+        if (!normalizedQuery) {
+          return true;
+        }
+        return [offer.productName, offer.activityName, offer.productCode, offer.ruleId]
+          .filter(Boolean)
+          .some((value) => value.toLocaleLowerCase().includes(normalizedQuery));
+      })
+      .sort((left, right) => {
+        if (left.eligible !== right.eligible) {
+          return Number(right.eligible) - Number(left.eligible);
+        }
+        if (left.offerType !== right.offerType) {
+          return left.offerType === "BUNDLE" ? -1 : 1;
+        }
+        return left.productName.localeCompare(right.productName);
+      });
+  }, [normalizedQuery, offers, onlyEligible]);
   return (
     <div className="exchange-offer-panel">
-      <Space className="panel-toolbar" align="center">
+      <Space className="panel-toolbar exchange-offer-toolbar" align="start" wrap>
         <div>
           <Typography.Title level={4} className="compact-title">
             可换购商品
           </Typography.Title>
           <Typography.Text type="secondary">来自已确认 EXCHANGE_PURCHASE 规则和商品目录</Typography.Text>
         </div>
-        <Space>
+        <Space className="exchange-offer-stats" wrap>
           <Tag color="green">{eligibleCount} 个可用</Tag>
-          <Tag>{offers.length} 条规则</Tag>
+          <Tag>{offers.length} 条方案</Tag>
         </Space>
       </Space>
+
+      <div className="exchange-filter-bar">
+        <Input
+          allowClear
+          prefix={<FilterOutlined />}
+          value={query}
+          placeholder="搜索商品名称、编码或活动"
+          onChange={(event) => setQuery(event.target.value)}
+          className="exchange-filter-input"
+        />
+        <Space size={6} className="exchange-availability-filter">
+          <Typography.Text type="secondary">只显示可加入</Typography.Text>
+          <Switch size="small" checked={onlyEligible} onChange={setOnlyEligible} />
+        </Space>
+        <Typography.Text type="secondary">
+          显示 {visibleOffers.length} / {offers.length}
+        </Typography.Text>
+      </div>
 
       {error ? <Alert type="error" showIcon message="换购清单加载失败" description={error} className="result-alert" /> : null}
       {loading ? <Alert type="info" showIcon message="正在查询当前可换购商品" className="result-alert" /> : null}
       {!loading && offers.length === 0 ? <EmptyState description="当前没有已发布的换购商品" /> : null}
+      {!loading && offers.length > 0 && visibleOffers.length === 0 ? (
+        <Alert
+          type="info"
+          showIcon
+          message={onlyEligible ? "当前没有可直接加入的换购方案" : "没有匹配的换购方案"}
+          description={onlyEligible ? "请先填写达到门槛的油品金额，或关闭“只显示可加入”查看未满足原因。" : "请更换商品名称、编码或活动关键词。"}
+          className="exchange-filter-empty"
+        />
+      ) : null}
 
       <div className="exchange-offer-list">
-        {offers.map((offer) => (
+        {visibleOffers.map((offer) => (
           <div className={`exchange-offer-card${offer.eligible ? " eligible" : " blocked"}`} key={`${offer.ruleId}-${offer.productCode}`}>
             <div className="exchange-offer-main">
               <Space direction="vertical" size={2}>

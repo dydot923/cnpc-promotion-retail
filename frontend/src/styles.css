@@ -555,6 +555,18 @@ body {
   align-items: center;
 }
 
+.cashier-topbar {
+  row-gap: 10px;
+}
+
+.cashier-primary-actions {
+  justify-content: flex-end;
+}
+
+.cashier-primary-actions .ant-btn-primary {
+  min-width: 168px;
+}
+
 .product-search-row {
   margin-bottom: 12px;
 }
@@ -722,6 +734,39 @@ body {
   border: 1px solid #d6e4ff;
   border-radius: 8px;
   background: #f7fbff;
+}
+
+.exchange-offer-toolbar {
+  row-gap: 8px;
+}
+
+.exchange-offer-stats {
+  justify-content: flex-end;
+}
+
+.exchange-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid #d6e4ff;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.exchange-filter-input {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.exchange-availability-filter {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.exchange-filter-empty {
+  margin-bottom: 12px;
 }
 
 .compact-title {
@@ -1170,6 +1215,14 @@ body {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .cashier-primary-actions {
+    width: 100%;
+  }
+
+  .cashier-primary-actions .ant-btn {
+    flex: 1 1 0;
+  }
+
   .mode-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1190,6 +1243,20 @@ body {
   .fuel-quick-form .ant-input-number,
   .fuel-quick-form .ant-input {
     width: 100% !important;
+  }
+
+  .exchange-filter-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .exchange-filter-input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .exchange-availability-filter {
+    justify-content: space-between;
   }
 }
 
