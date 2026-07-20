@@ -10,6 +10,7 @@ import com.cnpc.promoretail.importcenter.model.InventoryImportRow;
 import com.cnpc.promoretail.importcenter.model.PriceImportRow;
 import com.cnpc.promoretail.inventory.model.InventoryAlert;
 import com.cnpc.promoretail.inventory.model.InventoryAlertSeverity;
+import com.cnpc.promoretail.inventory.model.InventoryReplenishmentResponse;
 import com.cnpc.promoretail.inventory.repository.InMemoryInventoryAlertRecordRepository;
 import com.cnpc.promoretail.product.ProductQueryService;
 import com.cnpc.promoretail.product.model.ProductCatalogItem;
@@ -151,6 +152,41 @@ class ProductInventoryReplenishmentTest {
         assertThat(auditRepository.findByEntity("INVENTORY_ALERT", alert.alertId()))
                 .extracting(log -> log.actionType())
                 .containsExactly("INVENTORY_ALERT_HANDLE");
+    }
+
+    @Test
+    void inventoryCanBeListedAndReplenishmentWritesBackQuantity() {
+        InMemoryAuditLogRepository auditRepository = new InMemoryAuditLogRepository();
+        InventoryManagementService inventoryService = new InventoryManagementService(
+                productRepository,
+                new DefaultAuditLogService(auditRepository)
+        );
+
+        assertThat(inventoryService.items("低库存", "LOW"))
+                .singleElement()
+                .satisfies(item -> {
+                    assertThat(item.productCode()).isEqualTo("low-sku");
+                    assertThat(item.currentQuantity()).isEqualByComparingTo("8.00");
+                    assertThat(item.suggestedReplenishmentQuantity()).isEqualByComparingTo("12.00");
+                });
+
+        InventoryReplenishmentResponse response = inventoryService.replenish(
+                "low-sku",
+                new InventoryReplenishmentRequest(new BigDecimal("12"), "stock-manager", "到货入库")
+        );
+
+        assertThat(response.quantityBefore()).isEqualByComparingTo("8.00");
+        assertThat(response.replenishedQuantity()).isEqualByComparingTo("12.00");
+        assertThat(response.quantityAfter()).isEqualByComparingTo("20.00");
+        assertThat(productRepository.findInventoryQuantity("low-sku")).hasValueSatisfying(
+                quantity -> assertThat(quantity).isEqualByComparingTo("20.00")
+        );
+        assertThat(inventoryService.items("low-sku", "NORMAL"))
+                .singleElement()
+                .satisfies(item -> assertThat(item.currentQuantity()).isEqualByComparingTo("20.00"));
+        assertThat(auditRepository.findByEntity("PRODUCT_INVENTORY", "low-sku"))
+                .extracting(log -> log.actionType())
+                .containsExactly("INVENTORY_REPLENISH");
     }
 
     @Test

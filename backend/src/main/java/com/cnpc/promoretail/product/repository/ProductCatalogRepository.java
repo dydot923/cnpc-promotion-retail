@@ -21,7 +21,11 @@ public interface ProductCatalogRepository {
 
     List<ProductCatalogItem> search(String keyword, int limit);
 
+    List<ProductCatalogItem> searchInventory(String keyword, int limit);
+
     List<ProductCatalogItem> findByProductCodes(Collection<String> productCodes);
 
     Optional<BigDecimal> findInventoryQuantity(String productCode);
+
+    void saveInventoryQuantity(String productCode, BigDecimal quantity, String importVersion);
 }

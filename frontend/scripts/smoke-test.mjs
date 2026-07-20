@@ -85,6 +85,8 @@ async function main() {
   assert(files.dashboard.includes("运营看板") && files.dashboard.includes("低库存 TOP 10"), "DashboardPage sections missing");
   assert(files.importPage.includes("Upload.Dragger") && files.importPage.includes("前端不解析文件内容"), "ImportPage upload contract missing");
   assert(files.inventory.includes("生成补货清单") && files.inventory.includes("导出 Excel"), "InventoryAlertPage actions missing");
+  assert(files.inventory.includes("库存总览") && files.inventory.includes("商品补货入库"), "inventory overview/replenishment flow missing");
+  assert(files.inventory.includes("replenishInventory") && files.inventory.includes("按建议补货"), "inventory write-back action missing");
   assert(files.rules.includes("规则详情") && files.rules.includes("条件 JSON") && files.rules.includes("审计日志"), "RuleManagementPage drawer missing");
   assert(files.poster.includes("AI 海报服务未配置") && files.poster.includes("确认发布"), "PosterPage review flow missing");
   assert(files.operationCampaigns.includes("活动看板验收中心"), "activity acceptance center missing");

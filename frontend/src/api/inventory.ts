@@ -1,5 +1,25 @@
 import { apiRequest } from "./request";
-import type { InventoryAlert, InventoryAlertHandleRequest } from "../types";
+import type {
+  InventoryAlert,
+  InventoryAlertHandleRequest,
+  InventoryItem,
+  InventoryReplenishmentRequest,
+  InventoryReplenishmentResponse
+} from "../types";
+
+export function fetchInventoryItems(): Promise<InventoryItem[]> {
+  return apiRequest<InventoryItem[]>("/inventory/items");
+}
+
+export function replenishInventory(
+  productCode: string,
+  request: InventoryReplenishmentRequest
+): Promise<InventoryReplenishmentResponse> {
+  return apiRequest<InventoryReplenishmentResponse>(`/inventory/items/${encodeURIComponent(productCode)}/replenish`, {
+    method: "POST",
+    body: JSON.stringify(request)
+  });
+}
 
 export function fetchInventoryAlerts(): Promise<InventoryAlert[]> {
   return apiRequest<InventoryAlert[]>("/inventory/alerts");

@@ -18,6 +18,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -29,15 +30,18 @@ public class MybatisProductCatalogRepository implements ProductCatalogRepository
     private final ProductMapper productMapper;
     private final ProductPriceMapper priceMapper;
     private final InventorySnapshotMapper inventoryMapper;
+    private final JdbcTemplate jdbcTemplate;
 
     public MybatisProductCatalogRepository(
             ProductMapper productMapper,
             ProductPriceMapper priceMapper,
-            InventorySnapshotMapper inventoryMapper
+            InventorySnapshotMapper inventoryMapper,
+            JdbcTemplate jdbcTemplate
     ) {
         this.productMapper = productMapper;
         this.priceMapper = priceMapper;
         this.inventoryMapper = inventoryMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -118,6 +122,51 @@ public class MybatisProductCatalogRepository implements ProductCatalogRepository
     }
 
     @Override
+    public List<ProductCatalogItem> searchInventory(String keyword, int limit) {
+        String text = keyword == null ? "" : keyword.trim();
+        String pattern = "%" + text.toLowerCase() + "%";
+        return jdbcTemplate.query("""
+                        select p.product_code,
+                               p.barcode,
+                               p.product_name,
+                               p.category,
+                               latest_inventory.quantity,
+                               p.is_demo_data
+                        from product p
+                        join lateral (
+                            select snapshot.quantity
+                            from inventory_snapshot snapshot
+                            where snapshot.station_code = ?
+                              and snapshot.product_code = p.product_code
+                              and snapshot.is_demo_data = false
+                            order by snapshot.snapshot_at desc, snapshot.id desc
+                            limit 1
+                        ) latest_inventory on true
+                        where (? = ''
+                            or lower(p.product_code) like ?
+                            or lower(coalesce(p.barcode, '')) like ?
+                            or lower(p.product_name) like ?)
+                        order by p.product_code
+                        limit ?
+                        """,
+                (resultSet, rowNum) -> new ProductCatalogItem(
+                        resultSet.getString("product_code"),
+                        resultSet.getString("barcode"),
+                        resultSet.getString("product_name"),
+                        resultSet.getString("category"),
+                        BigDecimal.ZERO,
+                        resultSet.getBigDecimal("quantity"),
+                        resultSet.getBoolean("is_demo_data")
+                ),
+                DEFAULT_STATION_CODE,
+                text,
+                pattern,
+                pattern,
+                pattern,
+                Math.max(limit, 1));
+    }
+
+    @Override
     public List<ProductCatalogItem> findByProductCodes(Collection<String> productCodes) {
         if (productCodes == null || productCodes.isEmpty()) {
             return List.of();
@@ -133,6 +182,18 @@ public class MybatisProductCatalogRepository implements ProductCatalogRepository
     @Override
     public Optional<BigDecimal> findInventoryQuantity(String productCode) {
         return latestInventory(productCode).map(InventorySnapshotEntity::getQuantity);
+    }
+
+    @Override
+    public void saveInventoryQuantity(String productCode, BigDecimal quantity, String importVersion) {
+        InventorySnapshotEntity snapshot = new InventorySnapshotEntity();
+        snapshot.setStationCode(DEFAULT_STATION_CODE);
+        snapshot.setProductCode(productCode);
+        snapshot.setQuantity(quantity);
+        snapshot.setImportVersion(importVersion);
+        snapshot.setSnapshotAt(Instant.now());
+        snapshot.setDemoData(Boolean.FALSE);
+        inventoryMapper.insert(snapshot);
     }
 
     private void upsertProduct(

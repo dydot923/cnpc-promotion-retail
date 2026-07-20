@@ -20,7 +20,7 @@ export default function App() {
         <Suspense
           fallback={
             <div className="page-loading">
-              <Spin tip="正在加载页面" />
+              <Spin aria-label="正在加载页面" />
             </div>
           }
         >

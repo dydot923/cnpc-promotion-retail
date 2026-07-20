@@ -72,6 +72,13 @@ public class InMemoryProductCatalogRepository implements ProductCatalogRepositor
     }
 
     @Override
+    public List<ProductCatalogItem> searchInventory(String keyword, int limit) {
+        return search(keyword, limit).stream()
+                .filter(item -> inventoryByProductCode.containsKey(item.productCode()))
+                .toList();
+    }
+
+    @Override
     public List<ProductCatalogItem> findByProductCodes(Collection<String> productCodes) {
         if (productCodes == null || productCodes.isEmpty()) {
             return List.of();
@@ -86,6 +93,17 @@ public class InMemoryProductCatalogRepository implements ProductCatalogRepositor
     @Override
     public Optional<BigDecimal> findInventoryQuantity(String productCode) {
         return Optional.ofNullable(inventoryByProductCode.get(productCode));
+    }
+
+    @Override
+    public void saveInventoryQuantity(String productCode, BigDecimal quantity, String importVersion) {
+        ProductCatalogItem existing = products.get(productCode);
+        if (existing == null) {
+            throw new IllegalArgumentException("Unknown product: " + productCode);
+        }
+        inventoryByProductCode.put(productCode, quantity);
+        upsert(existing.productCode(), existing.barcode(), existing.productName(), existing.category(),
+                existing.unitPrice(), quantity);
     }
 
     private void upsert(

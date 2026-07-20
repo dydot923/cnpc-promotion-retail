@@ -62,8 +62,10 @@ class CheckoutExchangeOfferServiceTest {
         @Override public Optional<ProductCatalogItem> findByProductCode(String code) { return Optional.of(new ProductCatalogItem(code, null, code, "饮料", new BigDecimal("30"), new BigDecimal("20"), false)); }
         @Override public Optional<ProductCatalogItem> findByBarcode(String barcode) { return Optional.empty(); }
         @Override public List<ProductCatalogItem> search(String keyword, int limit) { return List.of(); }
+        @Override public List<ProductCatalogItem> searchInventory(String keyword, int limit) { return List.of(); }
         @Override public List<ProductCatalogItem> findByProductCodes(java.util.Collection<String> codes) { return codes.stream().map(code -> findByProductCode(code).orElseThrow()).toList(); }
         @Override public Optional<BigDecimal> findInventoryQuantity(String code) { return Optional.of(new BigDecimal("20")); }
+        @Override public void saveInventoryQuantity(String code, BigDecimal quantity, String importVersion) { }
     }
 
     private static final class TestRules implements PromotionRuleRepository {

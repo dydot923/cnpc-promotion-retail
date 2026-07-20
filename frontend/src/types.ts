@@ -582,6 +582,37 @@ export type InventoryAlertHandleRequest = {
   note?: string;
 };
 
+export type InventoryStockStatus = "NORMAL" | "LOW" | "CRITICAL" | "OUT_OF_STOCK";
+
+export type InventoryItem = {
+  productCode: string;
+  barcode?: string | null;
+  productName: string;
+  category?: string | null;
+  currentQuantity: number;
+  safetyStock: number;
+  suggestedReplenishmentQuantity: number;
+  stockStatus: InventoryStockStatus;
+};
+
+export type InventoryReplenishmentRequest = {
+  quantity: number;
+  operatorId?: string;
+  note?: string;
+};
+
+export type InventoryReplenishmentResponse = {
+  operationId: string;
+  productCode: string;
+  productName: string;
+  quantityBefore: number;
+  replenishedQuantity: number;
+  quantityAfter: number;
+  operatorId: string;
+  note?: string | null;
+  replenishedAt: string;
+};
+
 export type ReplenishmentItem = {
   productCode: string;
   barcode?: string | null;
