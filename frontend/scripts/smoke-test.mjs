@@ -68,6 +68,8 @@ async function main() {
   }
   assert(files.layout.includes("localStorage") && files.layout.includes("cnpc-role"), "role persistence missing");
   assert(files.layout.includes("width={220}") && !files.layout.includes("collapsed"), "fixed 220px sider missing");
+  assert(files.layout.includes("业务日期") && files.layout.includes("逢 7 / 逢 9"), "business date test control missing");
+  assert(files.layout.includes("fetchBusinessClock") && files.layout.includes("updateBusinessClock"), "backend business clock integration missing");
 
   for (const label of requiredCheckoutLabels) {
     assert(files.checkout.includes(label), `CheckoutPage missing label: ${label}`);

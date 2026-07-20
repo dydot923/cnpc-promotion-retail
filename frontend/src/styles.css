@@ -150,6 +150,79 @@ body {
   font-weight: 600;
 }
 
+.business-clock-trigger {
+  height: 52px;
+  padding: 4px 10px;
+  color: #003f88;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.business-clock-trigger:hover,
+.business-clock-trigger:focus-visible {
+  color: #003f88 !important;
+  background: #eef5fc !important;
+  border-color: #91b9df !important;
+}
+
+.business-clock-trigger.overridden {
+  color: #ad4e00;
+  background: #fff7e6;
+  border-color: #ffd591;
+}
+
+.business-clock-trigger .anticon {
+  font-size: 18px;
+}
+
+.business-clock-copy {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.business-clock-copy strong {
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.business-clock-copy small {
+  color: #66788a;
+  font-size: 11px;
+}
+
+.business-clock-panel {
+  width: 320px;
+  display: grid;
+  gap: 14px;
+}
+
+.business-clock-panel-header,
+.business-clock-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.business-clock-panel-header > div,
+.business-clock-field,
+.business-clock-quick-days {
+  display: grid;
+  gap: 6px;
+}
+
+.business-clock-panel-header small,
+.business-clock-field > span,
+.business-clock-quick-days > span {
+  color: #66788a;
+  font-size: 12px;
+}
+
+.business-clock-actions .ant-btn {
+  flex: 1 1 0;
+}
+
 .role-select {
   width: 116px;
 }
@@ -1318,6 +1391,15 @@ body {
 
   .brand-block span.ant-typography,
   .current-time {
+    display: none;
+  }
+
+  .business-clock-trigger {
+    width: 40px;
+    padding: 0;
+  }
+
+  .business-clock-copy {
     display: none;
   }
 

@@ -30,6 +30,10 @@ management:
       exposure:
         include: health,info
 
+app:
+  business-clock:
+    override-date: ${BUSINESS_DATE_OVERRIDE:}
+
 ---
 spring:
   config:

@@ -427,6 +427,13 @@ export type ApiResponse<T> = {
   message?: string | null;
 };
 
+export type BusinessClock = {
+  businessDate: string;
+  systemDate: string;
+  overrideEnabled: boolean;
+  updatedAt: string;
+};
+
 export type AuditLog = {
   auditId: string;
   actionType: string;

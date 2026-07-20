@@ -37,10 +37,11 @@ import type { InputRef } from "antd/es/input";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import { calculateCheckout, confirmCheckout, fetchExchangeOffers } from "../api/checkout";
 import { fetchProductByBarcode, fetchProductByCode, searchProducts } from "../api/products";
 import { fetchStations } from "../api/stations";
+import type { AppOutletContext } from "../components/AppLayout";
 import EmptyState from "../components/EmptyState";
 import Price from "../components/Price";
 import type {
@@ -594,6 +595,7 @@ const memberLevelOptions = [
 ];
 
 export default function CheckoutPage() {
+  const { businessDate: globalBusinessDate } = useOutletContext<AppOutletContext>();
   const [searchParams] = useSearchParams();
   const requestedDemoKey = searchParams.get("demo") || undefined;
   const requestedProductCode = searchParams.get("product") || undefined;
@@ -700,7 +702,7 @@ export default function CheckoutPage() {
       fetchExchangeOffers({
         fuelType: watchedFuelType || "GASOLINE",
         fuelAmount: Number(watchedFuelAmount || 0),
-        businessDate: watchedBusinessDate || currentBusinessTime().businessDate,
+        businessDate: watchedBusinessDate || globalBusinessDate,
         stationType: watchedStationType || "gas_station",
         stationProvince: watchedStationProvince || "新疆"
       }),
@@ -756,6 +758,17 @@ export default function CheckoutPage() {
   useEffect(() => {
     barcodeInputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!globalBusinessDate || contextForm.getFieldValue("businessDate") === globalBusinessDate) {
+      return;
+    }
+    contextForm.setFieldValue("businessDate", globalBusinessDate);
+    checkoutMutation.reset();
+    confirmMutation.reset();
+    setSelectedCandidateId(undefined);
+    setLatestConfirmationId(undefined);
+  }, [globalBusinessDate, contextForm]);
 
   useEffect(() => {
     if (!requestedDemoKey || requestedDemoKey === loadedDemoKey) {
@@ -862,7 +875,7 @@ export default function CheckoutPage() {
     fuelForm.setFieldsValue(demo.fuel);
     customerForm.setFieldsValue(demo.customer);
     contextForm.setFieldsValue({
-      ...defaultContext(),
+      ...defaultContext(globalBusinessDate),
       memberBirthMonth: demo.customer.member ? 7 : undefined,
       ...(demo.context || {})
     });
@@ -1043,7 +1056,7 @@ export default function CheckoutPage() {
       return;
     }
     const current = currentBusinessTime();
-    const businessDate = contextValues.businessDate || current.businessDate;
+    const businessDate = contextValues.businessDate || globalBusinessDate || current.businessDate;
     const businessTime = normalizeBusinessTime(contextValues.businessTime || current.businessTime);
     const selectedCouponIds = resolveSelectedCouponIds(contextValues);
     const availableCoupons = buildAvailableCoupons(contextValues);
@@ -1121,7 +1134,7 @@ export default function CheckoutPage() {
     setMode("shop");
     fuelForm.setFieldsValue(fuel());
     customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "demo-member-002" });
-    contextForm.setFieldsValue(defaultContext());
+    contextForm.setFieldsValue(defaultContext(globalBusinessDate));
     resetCalculation();
     setLoadedDemoKey(undefined);
     barcodeInputRef.current?.focus();
@@ -1464,7 +1477,7 @@ export default function CheckoutPage() {
                   label: "验收日期、站点、充值与优惠券",
                   forceRender: true,
                   children: (
-                    <Form<TransactionContextForm> form={contextForm} layout="vertical" initialValues={defaultContext()}>
+                    <Form<TransactionContextForm> form={contextForm} layout="vertical" initialValues={defaultContext(globalBusinessDate)}>
                       <div className="compact-field-grid context-fields">
                         <Form.Item label="验收日期" name="businessDate">
                           <Input type="date" />
@@ -2340,13 +2353,13 @@ function fuel(fuelType: FuelType = "NONE", fuelGrade = "", amount = 0, volume = 
   return { fuelType, fuelGrade, amount, volume };
 }
 
-function defaultContext(): TransactionContextForm {
+function defaultContext(businessDate?: string): TransactionContextForm {
   const current = currentBusinessTime();
   return {
     stationCode: "1-A6501-C001-S001",
     stationType: "gas_station",
     stationProvince: "新疆",
-    businessDate: current.businessDate,
+    businessDate: businessDate || current.businessDate,
     businessTime: current.businessTime,
     rechargeAmount: 0,
     paymentMethod: "E_ENJOY_CARD",

@@ -12,6 +12,8 @@ set "FRONTEND_PORT=%FRONTEND_PORT_START%"
 set "DB_URL=jdbc:postgresql://localhost:5432/cnpc_promotion"
 set "DB_USERNAME=cnpc"
 set "DB_PASSWORD=cnpc"
+rem Preserve the existing demo database when a previously applied migration file has changed locally.
+set "SPRING_FLYWAY_VALIDATE_ON_MIGRATE=false"
 set "POSTGRES_DB=cnpc_promotion"
 set "POSTGRES_USER=cnpc"
 set "POSTGRES_PASSWORD=cnpc"
@@ -124,7 +126,7 @@ echo [2/4] Launching backend window on port %BACKEND_PORT%...
 if "%DRY_RUN%"=="1" (
   echo DRY_RUN start backend in "%BACKEND_DIR%" on port %BACKEND_PORT%
 ) else (
-  start "CNPC Backend :%BACKEND_PORT%" /D "%BACKEND_DIR%" cmd /k "set DB_URL=%DB_URL%&& set DB_USERNAME=%DB_USERNAME%&& set DB_PASSWORD=%DB_PASSWORD%&& call mvn -DskipTests -Dspring-boot.run.profiles=dev-db -Dspring-boot.run.arguments=--server.port=%BACKEND_PORT% spring-boot:run"
+  start "CNPC Backend :%BACKEND_PORT%" /D "%BACKEND_DIR%" cmd /k "set DB_URL=%DB_URL%&& set DB_USERNAME=%DB_USERNAME%&& set DB_PASSWORD=%DB_PASSWORD%&& set SPRING_FLYWAY_VALIDATE_ON_MIGRATE=%SPRING_FLYWAY_VALIDATE_ON_MIGRATE%&& call mvn -DskipTests -Dspring-boot.run.profiles=dev-db -Dspring-boot.run.arguments=--server.port=%BACKEND_PORT% spring-boot:run"
   call :wait_backend
   if errorlevel 1 (
     echo [ERROR] Backend did not become checkout-ready.
@@ -193,6 +195,8 @@ exit /b 0
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:%1/api/checkout/capabilities'; if ($r.success -and $r.data.service -eq 'cnpc-promotion-retail' -and $r.data.apiVersion -eq 'checkout-v2' -and $r.data.calculate -and $r.data.confirm) { exit 0 } } catch {}; exit 1" >nul 2>nul
 if errorlevel 1 exit /b 1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:%1/api/stations/%DEMO_STATION_CODE%'; if ($r.success -and $r.data.stationCode -eq '%DEMO_STATION_CODE%') { exit 0 } } catch {}; exit 1" >nul 2>nul
+if errorlevel 1 exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $r = Invoke-RestMethod -TimeoutSec 2 'http://127.0.0.1:%1/api/system/business-clock'; if ($r.success -and $r.data.businessDate -and $null -ne $r.data.overrideEnabled) { exit 0 } } catch {}; exit 1" >nul 2>nul
 exit /b %ERRORLEVEL%
 
 :cleanup_frontends
