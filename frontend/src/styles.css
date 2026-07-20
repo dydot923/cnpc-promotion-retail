@@ -355,6 +355,7 @@ body {
 .candidate-card.selected {
   border-color: #003f88;
   background: #e8f0fa;
+  box-shadow: inset 0 0 0 1px #003f88;
 }
 
 .candidate-card.recommended {
@@ -366,6 +367,24 @@ body {
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+}
+
+.candidate-rank {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #eef3f8;
+  color: #003f88;
+  font-weight: 800;
+}
+
+.candidate-rank.recommended {
+  background: #ffb81c;
+  color: #5c3b00;
 }
 
 .candidate-money {
@@ -1048,6 +1067,10 @@ body {
   border-left-color: #8c8c8c;
 }
 
+.selected-plan-anchor {
+  scroll-margin-top: 72px;
+}
+
 .feedback-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1099,12 +1122,104 @@ body {
   margin-top: 12px;
 }
 
+.settlement-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 12px;
+  border-top: 1px solid #d9e2ec;
+  border-bottom: 1px solid #d9e2ec;
+}
+
+.settlement-section {
+  min-width: 0;
+  padding: 12px 14px 12px 0;
+}
+
+.settlement-section + .settlement-section {
+  padding-right: 0;
+  padding-left: 14px;
+  border-left: 1px solid #d9e2ec;
+}
+
+.settlement-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  color: #003f88;
+}
+
+.settlement-lines {
+  display: grid;
+  gap: 2px;
+}
+
+.settlement-line {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid #eef1f4;
+}
+
+.settlement-line:last-child {
+  border-bottom: 0;
+}
+
+.settlement-line > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.settlement-line strong,
+.settlement-line small {
+  overflow-wrap: anywhere;
+}
+
+.settlement-line small {
+  color: #66788a;
+}
+
+.benefit-line > strong {
+  flex: 0 0 auto;
+  color: #389e0d;
+}
+
+.settlement-total-line {
+  grid-column: 1 / -1;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+  border-top: 1px solid #d9e2ec;
+}
+
+.settlement-total-line span,
+.settlement-total-line strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .original-choice {
   border-left: 4px solid #8c8c8c;
 }
 
 .confirm-panel {
   border-left: 4px solid #d71920;
+}
+
+.confirm-amount-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-weight: 700;
 }
 
 .confirmation-done {
@@ -1257,6 +1372,32 @@ body {
 
   .exchange-availability-filter {
     justify-content: space-between;
+  }
+
+  .candidate-card-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settlement-breakdown {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settlement-section,
+  .settlement-section + .settlement-section {
+    padding: 12px 0;
+    border-left: 0;
+  }
+
+  .settlement-section + .settlement-section {
+    border-top: 1px solid #d9e2ec;
+  }
+
+  .settlement-total-line {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 0;
   }
 }
 

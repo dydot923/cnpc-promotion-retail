@@ -616,7 +616,9 @@ export default function CheckoutPage() {
   const [latestConfirmationId, setLatestConfirmationId] = useState<string>();
   const [api, contextHolder] = message.useMessage();
   const barcodeInputRef = useRef<InputRef>(null);
+  const selectedPlanRef = useRef<HTMLDivElement>(null);
   const watchedFuelType = Form.useWatch("fuelType", fuelForm) as FuelType | undefined;
+  const watchedFuelGrade = Form.useWatch("fuelGrade", fuelForm) as string | undefined;
   const watchedFuelAmount = Form.useWatch("amount", fuelForm) as number | undefined;
   const watchedStationType = Form.useWatch("stationType", contextForm) as string | undefined;
   const watchedStationProvince = Form.useWatch("stationProvince", contextForm) as string | undefined;
@@ -712,10 +714,6 @@ export default function CheckoutPage() {
     [productLookupMutation.data]
   );
   const activeDemo = useMemo(() => demoCases.find((demo) => demo.key === loadedDemoKey), [loadedDemoKey]);
-  const promotionCandidates = useMemo(
-    () => uniquePromotionCandidates(result?.availableCandidates || []),
-    [result]
-  );
   const backendRecommended = useMemo(
     () => result?.availableCandidates.find((candidate) => candidate.candidateId === result.recommendedCandidateId),
     [result]
@@ -727,6 +725,13 @@ export default function CheckoutPage() {
     [activeDemo, result]
   );
   const recommended = acceptanceCandidate || backendRecommended;
+  const promotionCandidates = useMemo(
+    () => rankPromotionCandidates(
+      uniquePromotionCandidates(result?.availableCandidates || [], recommended?.candidateId),
+      recommended?.candidateId
+    ),
+    [recommended?.candidateId, result]
+  );
   const selectedCandidate = useMemo(() => {
     if (!result) {
       return undefined;
@@ -736,6 +741,9 @@ export default function CheckoutPage() {
       (selectedCandidateId === result.originalPriceFallback.candidateId ? result.originalPriceFallback : undefined)
     );
   }, [result, selectedCandidateId]);
+  const activeCandidate = result
+    ? selectedCandidate || recommended || result.originalPriceFallback
+    : undefined;
   const cartCount = useMemo(() => cartItems.reduce((total, cartItem) => total + Number(cartItem.quantity || 0), 0), [cartItems]);
   const cartTotal = useMemo(() => sumCart(cartItems), [cartItems]);
   const hasTransactionInput = cartItems.length > 0
@@ -1101,6 +1109,11 @@ export default function CheckoutPage() {
       operatorId: "cashier-001",
       operatorName: "收银员"
     });
+  }
+
+  function selectPromotionCandidate(candidateId: string) {
+    setSelectedCandidateId(candidateId);
+    requestAnimationFrame(() => selectedPlanRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   function startNewCheckout() {
@@ -1575,23 +1588,41 @@ export default function CheckoutPage() {
           {result ? (
             <>
               {activeDemo ? <ScenarioAcceptance demo={activeDemo} result={result} /> : null}
-              <PromotionOutcome result={result} recommended={recommended} />
+              <div ref={selectedPlanRef} className="selected-plan-anchor">
+                <PromotionOutcome
+                  result={result}
+                  candidate={activeCandidate || result.originalPriceFallback}
+                  recommendedCandidateId={recommended?.candidateId}
+                  cartItems={cartItems}
+                  fuelType={watchedFuelType || "NONE"}
+                  fuelGrade={watchedFuelGrade}
+                  fuelAmount={Number(watchedFuelAmount || 0)}
+                  rechargeAmount={Number(watchedRechargeAmount || 0)}
+                />
+              </div>
 
               <section className="panel">
-                <Typography.Title level={3} className="section-title">
-                  可用促销方案
-                </Typography.Title>
+                <Space className="panel-toolbar" align="start" wrap>
+                  <div>
+                    <Typography.Title level={3} className="section-title">
+                      方案选择
+                    </Typography.Title>
+                    <Typography.Text type="secondary">系统最优方案排在第一位，点击其他方案可立即切换结算明细。</Typography.Text>
+                  </div>
+                  <Tag color="blue">{promotionCandidates.length} 个可选</Tag>
+                </Space>
                 {promotionCandidates.length === 0 ? (
                   <EmptyState description="没有可用促销" />
                 ) : (
                   <div className="candidate-list">
-                    {promotionCandidates.map((candidate) => (
+                    {promotionCandidates.map((candidate, index) => (
                       <CandidateCard
                         key={candidate.candidateId}
                         candidate={candidate}
+                        rank={index + 1}
                         selected={selectedCandidateId === candidate.candidateId}
                         recommended={candidate.candidateId === recommended?.candidateId}
-                        onSelect={() => setSelectedCandidateId(candidate.candidateId)}
+                        onSelect={() => selectPromotionCandidate(candidate.candidateId)}
                       />
                     ))}
                   </div>
@@ -1608,7 +1639,7 @@ export default function CheckoutPage() {
                       {result.originalPriceFallback.explanation || "顾客不使用促销时选择此方案"}
                     </Typography.Text>
                   </div>
-                  <Button className="blue-button" onClick={() => setSelectedCandidateId(result.originalPriceFallback.candidateId)}>
+                  <Button className="blue-button" onClick={() => selectPromotionCandidate(result.originalPriceFallback.candidateId)}>
                     选择原价方案
                   </Button>
                 </Space>
@@ -1621,7 +1652,11 @@ export default function CheckoutPage() {
                     <Typography.Title level={3} className="section-title">
                       确认结算
                     </Typography.Title>
-                    <Typography.Text type="secondary">当前选择：{selectedCandidate?.title || result.originalPriceFallback.title}</Typography.Text>
+                    <Typography.Text type="secondary">当前选择：{activeCandidate?.title || result.originalPriceFallback.title}</Typography.Text>
+                    <div className="confirm-amount-line">
+                      <span>本单应收</span>
+                      <Price amount={activeCandidate?.payableAmount || result.originalPriceFallback.payableAmount} size="medium" variant="promo" />
+                    </div>
                     {latestConfirmationId ? (
                       <div className="confirmation-done">
                         <CheckCircleOutlined />
@@ -1638,7 +1673,7 @@ export default function CheckoutPage() {
                       disabled={!selectedCandidateId || Boolean(latestConfirmationId)}
                       onClick={confirmSettlement}
                     >
-                      确认收款
+                      确认收款 {formatMoney(toNumber(activeCandidate?.payableAmount))}
                     </Button>
                     <Button icon={<PrinterOutlined />} disabled={!latestConfirmationId} onClick={() => api.info("打印功能待接入")}>
                       打印
@@ -1674,31 +1709,53 @@ export default function CheckoutPage() {
   );
 }
 
-function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateResponse; recommended?: Candidate }) {
-  const saved = toNumber(result.discountAmount);
-  const original = toNumber(result.originalAmount);
+function PromotionOutcome({
+  result,
+  candidate,
+  recommendedCandidateId,
+  cartItems,
+  fuelType,
+  fuelGrade,
+  fuelAmount,
+  rechargeAmount
+}: {
+  result: CheckoutCalculateResponse;
+  candidate: Candidate;
+  recommendedCandidateId?: string;
+  cartItems: CartItem[];
+  fuelType: FuelType;
+  fuelGrade?: string;
+  fuelAmount: number;
+  rechargeAmount: number;
+}) {
+  const saved = toNumber(candidate.discountAmount);
+  const original = toNumber(candidate.originalAmount);
   const savedRate = original > 0 ? Math.round((saved / original) * 100) : 0;
-  const hasPromotion = Boolean(recommended && recommended.ruleType !== "ORIGINAL_PRICE");
+  const hasPromotion = candidate.ruleType !== "ORIGINAL_PRICE";
+  const isRecommended = candidate.candidateId === recommendedCandidateId;
   const warnings = result.warnings.length + result.inventoryWarnings.length;
 
   return (
     <section className={`panel promotion-outcome ${hasPromotion ? "hit" : "fallback"}`}>
-      <Space className="panel-toolbar" align="start">
+      <Space className="panel-toolbar" align="start" wrap>
         <div>
           <Typography.Title level={3} className="section-title">
-            推荐方案
+            {isRecommended ? "系统最优方案" : "当前选择方案"}
           </Typography.Title>
-          <Typography.Text strong>{recommended?.title || result.originalPriceFallback.title}</Typography.Text>
+          <Typography.Text strong>{candidate.title}</Typography.Text>
           <br />
-          <Typography.Text type="secondary">{result.explanations.join(" ") || "后端已返回本单结算结果。"}</Typography.Text>
+          <Typography.Text type="secondary">{candidate.explanation || "本方案已完成价格和权益计算。"}</Typography.Text>
         </div>
-        <Tag color={hasPromotion ? "green" : "default"}>{hasPromotion ? "已命中活动" : "原价结算"}</Tag>
+        <Space wrap>
+          {isRecommended ? <Tag color="gold">系统最优</Tag> : <Tag color="blue">用户选择</Tag>}
+          <Tag color={hasPromotion ? "green" : "default"}>{hasPromotion ? "已命中活动" : "原价结算"}</Tag>
+        </Space>
       </Space>
 
       <div className="payable-card">
         <div>
-          <Typography.Text>顾客到手价</Typography.Text>
-          <Price amount={result.payableAmount} size="large" variant="promo" />
+          <Typography.Text>本单应收</Typography.Text>
+          <Price amount={candidate.payableAmount} size="large" variant="promo" />
         </div>
         <div className="payable-saving">
           <span>本单优惠</span>
@@ -1708,7 +1765,7 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
       </div>
 
       <div className="feedback-grid">
-        <FeedbackTile label="原价" value={<Price amount={result.originalAmount} size="medium" variant="muted" strike={saved > 0} />} />
+        <FeedbackTile label="原价" value={<Price amount={candidate.originalAmount} size="medium" variant="muted" strike={saved > 0} />} />
         <FeedbackTile label="可选活动" value={`${uniquePromotionCandidates(result.availableCandidates).length} 个`} />
         <FeedbackTile label="不可用活动" value={`${result.blockedPromotions.length} 个`} tone={result.blockedPromotions.length ? "warning" : "normal"} />
         <FeedbackTile label="库存/系统提醒" value={`${warnings} 条`} tone={warnings ? "warning" : "normal"} />
@@ -1719,20 +1776,20 @@ function PromotionOutcome({ result, recommended }: { result: CheckoutCalculateRe
         <span>
           {hasPromotion
             ? saved > 0
-              ? `已为顾客选择“${recommended?.title}”，少付 ${formatMoney(saved)}。`
-              : `已为顾客命中“${recommended?.title}”，请核对赠品、赠券和积分权益。`
+              ? `当前选择“${candidate.title}”，顾客少付 ${formatMoney(saved)}。`
+              : `当前选择“${candidate.title}”，请核对赠品、赠券和积分权益。`
             : "本单没有产生优惠，可按原价继续收款。"}
         </span>
       </div>
 
-      {recommended ? (
-        <div className="reward-strip">
-          {renderGifts(recommended.gifts)}
-          {renderCoupons(recommended.coupons)}
-          {recommended.consumedCouponIds.length > 0 ? <Tag color="purple">核销券 {recommended.consumedCouponIds.join(", ")}</Tag> : null}
-          {recommended.pointsMultiplier > 1 ? <Tag color="cyan">积分 x {recommended.pointsMultiplier}</Tag> : null}
-        </div>
-      ) : null}
+      <SettlementBreakdown
+        candidate={candidate}
+        cartItems={cartItems}
+        fuelType={fuelType}
+        fuelGrade={fuelGrade}
+        fuelAmount={fuelAmount}
+        rechargeAmount={rechargeAmount}
+      />
       {result.pointsPreview ? (
         <Alert
           type="success"
@@ -1792,6 +1849,132 @@ function ScenarioAcceptance({ demo, result }: { demo: DemoCase; result: Checkout
   );
 }
 
+function SettlementBreakdown({
+  candidate,
+  cartItems,
+  fuelType,
+  fuelGrade,
+  fuelAmount,
+  rechargeAmount
+}: {
+  candidate: Candidate;
+  cartItems: CartItem[];
+  fuelType: FuelType;
+  fuelGrade?: string;
+  fuelAmount: number;
+  rechargeAmount: number;
+}) {
+  const hasBenefits = toNumber(candidate.discountAmount) > 0
+    || candidate.gifts.length > 0
+    || candidate.coupons.length > 0
+    || candidate.pointsMultiplier > 1
+    || candidate.consumedCouponIds.length > 0;
+
+  return (
+    <div className="settlement-breakdown">
+      <div className="settlement-section">
+        <div className="settlement-section-header">
+          <strong>本单购买</strong>
+          <Tag>{cartItems.reduce((total, item) => total + Number(item.quantity || 0), 0)} 件商品</Tag>
+        </div>
+        <div className="settlement-lines">
+          {cartItems.map((item) => (
+            <div className="settlement-line" key={item.lineId}>
+              <div>
+                <strong>{item.name}</strong>
+                <small>{item.productCode} / {formatMoney(Number(item.unitPrice || 0))} x {item.quantity}</small>
+              </div>
+              <Price amount={lineTotal(item)} size="small" />
+            </div>
+          ))}
+          {fuelAmount > 0 ? (
+            <div className="settlement-line">
+              <div>
+                <strong>{fuelTypeLabel(fuelType)}{fuelGrade ? ` ${fuelGrade}` : ""}</strong>
+                <small>油品消费</small>
+              </div>
+              <Price amount={fuelAmount} size="small" />
+            </div>
+          ) : null}
+          {rechargeAmount > 0 ? (
+            <div className="settlement-line">
+              <div>
+                <strong>会员充值</strong>
+                <small>本单充值金额</small>
+              </div>
+              <Price amount={rechargeAmount} size="small" />
+            </div>
+          ) : null}
+          {cartItems.length === 0 && fuelAmount <= 0 && rechargeAmount <= 0 ? (
+            <Typography.Text type="secondary">本单没有商品或油品明细</Typography.Text>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="settlement-section benefit-section">
+        <div className="settlement-section-header">
+          <strong>优惠与赠送</strong>
+          <Tag color={hasBenefits ? "green" : "default"}>{hasBenefits ? "已享权益" : "无额外权益"}</Tag>
+        </div>
+        <div className="settlement-lines">
+          {toNumber(candidate.discountAmount) > 0 ? (
+            <div className="settlement-line benefit-line">
+              <div>
+                <strong>价格优惠</strong>
+                <small>{candidate.title}</small>
+              </div>
+              <strong>-{formatMoney(toNumber(candidate.discountAmount))}</strong>
+            </div>
+          ) : null}
+          {candidate.gifts.map((gift) => (
+            <div className="settlement-line benefit-line" key={`gift-${gift.productCode}`}>
+              <div>
+                <strong>赠送 {gift.name}</strong>
+                <small>商品编码 {gift.productCode}</small>
+              </div>
+              <strong>x {gift.quantity}</strong>
+            </div>
+          ))}
+          {candidate.coupons.map((coupon, index) => (
+            <div className="settlement-line benefit-line" key={`coupon-${coupon.couponName}-${index}`}>
+              <div>
+                <strong>赠券 {coupon.couponName}</strong>
+                <small>面额 {formatMoney(Number(coupon.amount || 0))}</small>
+              </div>
+              <strong>x {coupon.quantity}</strong>
+            </div>
+          ))}
+          {candidate.pointsMultiplier > 1 ? (
+            <div className="settlement-line benefit-line">
+              <div>
+                <strong>会员积分</strong>
+                <small>按当前方案累计</small>
+              </div>
+              <strong>x {candidate.pointsMultiplier}</strong>
+            </div>
+          ) : null}
+          {candidate.consumedCouponIds.length > 0 ? (
+            <div className="settlement-line benefit-line">
+              <div>
+                <strong>已使用优惠券</strong>
+                <small>{candidate.consumedCouponIds.join("、")}</small>
+              </div>
+              <strong>{candidate.consumedCouponIds.length} 张</strong>
+            </div>
+          ) : null}
+          {!hasBenefits ? <Typography.Text type="secondary">当前方案按原价结算，没有赠品或赠券。</Typography.Text> : null}
+        </div>
+      </div>
+
+      <div className="settlement-total-line">
+        <span>原价 <Price amount={candidate.originalAmount} size="small" variant="muted" strike={toNumber(candidate.discountAmount) > 0} /></span>
+        <span>优惠 <Price amount={candidate.discountAmount} size="small" variant="success" /></span>
+        <strong>应收 <Price amount={candidate.payableAmount} size="medium" variant="promo" /></strong>
+      </div>
+    </div>
+  );
+}
+
 function FeedbackTile({
   label,
   value,
@@ -1811,11 +1994,13 @@ function FeedbackTile({
 
 function CandidateCard({
   candidate,
+  rank,
   selected,
   recommended,
   onSelect
 }: {
   candidate: Candidate;
+  rank: number;
   selected: boolean;
   recommended: boolean;
   onSelect: () => void;
@@ -1834,16 +2019,19 @@ function CandidateCard({
       }}
     >
       <div className="candidate-card-header">
-        <Space direction="vertical" size={0}>
-          <Typography.Text strong>{candidate.title}</Typography.Text>
-          <Typography.Text type="secondary">
-            {ruleTypeLabel(candidate.ruleType)} / {candidate.ruleVersionId}
-          </Typography.Text>
+        <Space align="start" size={10}>
+          <span className={`candidate-rank${recommended ? " recommended" : ""}`}>{rank}</span>
+          <Space direction="vertical" size={0}>
+            <Typography.Text strong>{candidate.title}</Typography.Text>
+            <Typography.Text type="secondary">
+              {ruleTypeLabel(candidate.ruleType)} / {candidate.ruleVersionId}
+            </Typography.Text>
+          </Space>
         </Space>
-        <Space>
-          {recommended ? <Tag color="gold">推荐</Tag> : null}
+        <Space wrap>
+          {recommended ? <Tag color="gold">系统最优</Tag> : <Tag>备选方案</Tag>}
           <Tag color={candidate.stackable ? "blue" : "orange"}>{candidate.stackable ? "可叠加" : "互斥"}</Tag>
-          {selected ? <Tag color="green">已选择</Tag> : null}
+          {selected ? <Tag color="green">当前选择</Tag> : null}
         </Space>
       </div>
       <div className="candidate-money">
@@ -2247,10 +2435,11 @@ function normalizeBusinessTime(value: string) {
   return /^\d{2}:\d{2}$/.test(value) ? `${value}:00` : value;
 }
 
-function uniquePromotionCandidates(candidates: Candidate[]) {
+function uniquePromotionCandidates(candidates: Candidate[], preferredCandidateId?: string) {
   const unique = new Map<string, Candidate>();
-  candidates
+  [...candidates]
     .filter((candidate) => candidate.ruleType !== "ORIGINAL_PRICE")
+    .sort((left, right) => Number(right.candidateId === preferredCandidateId) - Number(left.candidateId === preferredCandidateId))
     .forEach((candidate) => {
       const signature = JSON.stringify({
         ruleType: candidate.ruleType,
@@ -2266,6 +2455,29 @@ function uniquePromotionCandidates(candidates: Candidate[]) {
       }
     });
   return Array.from(unique.values());
+}
+
+function rankPromotionCandidates(candidates: Candidate[], recommendedCandidateId?: string) {
+  return [...candidates].sort((left, right) => {
+    const recommendationOrder = Number(right.candidateId === recommendedCandidateId)
+      - Number(left.candidateId === recommendedCandidateId);
+    if (recommendationOrder !== 0) {
+      return recommendationOrder;
+    }
+    const payableOrder = toNumber(left.payableAmount) - toNumber(right.payableAmount);
+    if (payableOrder !== 0) {
+      return payableOrder;
+    }
+    const discountOrder = toNumber(right.discountAmount) - toNumber(left.discountAmount);
+    if (discountOrder !== 0) {
+      return discountOrder;
+    }
+    const benefitOrder = (right.gifts.length + right.coupons.length) - (left.gifts.length + left.coupons.length);
+    if (benefitOrder !== 0) {
+      return benefitOrder;
+    }
+    return left.title.localeCompare(right.title);
+  });
 }
 
 function lineTotal(record: CartItem) {
@@ -2301,6 +2513,18 @@ function toNumber(value: number | string | null | undefined) {
 
 function formatMoney(value: number) {
   return `¥${value.toFixed(2)}`;
+}
+
+function fuelTypeLabel(value: FuelType) {
+  const labels: Record<FuelType, string> = {
+    NONE: "无油品",
+    GASOLINE: "汽油",
+    DIESEL: "柴油",
+    CNG: "CNG",
+    LNG: "LNG",
+    CN98: "CN98"
+  };
+  return labels[value] || value;
 }
 
 function ruleTypeLabel(value: string) {
