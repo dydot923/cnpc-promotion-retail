@@ -20,6 +20,7 @@ public record PromotionRule(
         if (activityName == null || activityName.isBlank()) {
             throw new IllegalArgumentException("activityName is required");
         }
+        activityName = PromotionActivityNameLocalizer.localize(activityName);
         if (ruleType == null) {
             throw new IllegalArgumentException("ruleType is required");
         }
