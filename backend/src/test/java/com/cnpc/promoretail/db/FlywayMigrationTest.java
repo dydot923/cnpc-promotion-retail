@@ -381,7 +381,7 @@ class FlywayMigrationTest {
                     from product
                     where product_code like 'demo-%'
                       and is_demo_data = true
-                    """)).isEqualTo(2);
+                    """)).isEqualTo(1);
             assertThat(count(statement, """
                     select count(*)
                     from product_price

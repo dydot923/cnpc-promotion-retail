@@ -6,6 +6,7 @@ import com.cnpc.promoretail.ruleengine.model.CartTotals;
 import com.cnpc.promoretail.ruleengine.model.PromotionRule;
 import com.cnpc.promoretail.ruleengine.model.PromotionRuleType;
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 
 public class FixedPriceBenefitCalculator extends AbstractBenefitCalculator {
@@ -24,25 +25,31 @@ public class FixedPriceBenefitCalculator extends AbstractBenefitCalculator {
 
         BigDecimal fixedPrice = money(rule.benefit().fixedPrice());
         boolean packagePrice = rule.ruleId().startsWith("abv2-99-zone-")
-                || "board_pack_price".equals(rule.exclusiveGroup());
+                || (rule.exclusiveGroup() != null
+                && rule.exclusiveGroup().startsWith("board_pack_price"));
         int packageQuantity = packagePrice
                 ? Math.max(rule.condition().minProductQuantity(), 1)
                 : 1;
-        BigDecimal discount = items.stream()
-                .map(item -> {
-                    int packageCount = item.quantity() / packageQuantity;
-                    if (packageCount <= 0) {
-                        return BigDecimal.ZERO;
-                    }
-                    BigDecimal packageOriginalPrice = item.unitPrice()
-                            .multiply(BigDecimal.valueOf(packageQuantity));
-                    return packageOriginalPrice.subtract(fixedPrice)
-                            .max(BigDecimal.ZERO)
-                            .multiply(BigDecimal.valueOf(packageCount));
-                })
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        int totalQuantity = items.stream().mapToInt(CartItem::quantity).sum();
+        int packageCount = totalQuantity / packageQuantity;
+        int remainingQuantity = packageCount * packageQuantity;
+        BigDecimal promotionalOriginalAmount = BigDecimal.ZERO;
+        for (CartItem item : items.stream()
+                .sorted(Comparator.comparing(CartItem::unitPrice).reversed())
+                .toList()) {
+            int appliedQuantity = Math.min(item.quantity(), remainingQuantity);
+            promotionalOriginalAmount = promotionalOriginalAmount.add(
+                    item.unitPrice().multiply(BigDecimal.valueOf(appliedQuantity)));
+            remainingQuantity -= appliedQuantity;
+            if (remainingQuantity == 0) {
+                break;
+            }
+        }
+        BigDecimal discount = promotionalOriginalAmount
+                .subtract(fixedPrice.multiply(BigDecimal.valueOf(packageCount)));
 
-        if (discount.compareTo(BigDecimal.ZERO) <= 0) {
+        if (discount.compareTo(BigDecimal.ZERO) < 0
+                || (discount.compareTo(BigDecimal.ZERO) == 0 && !packagePrice)) {
             return BenefitCalculation.blocked(List.of(packageQuantity > 1
                     ? "商品数量未达到促销包装系数，或固定促销包价未低于当前执行价。"
                     : "固定促销价未低于当前执行价。"));

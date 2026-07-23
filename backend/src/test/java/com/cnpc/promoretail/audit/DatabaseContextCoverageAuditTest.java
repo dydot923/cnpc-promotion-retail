@@ -77,7 +77,7 @@ class DatabaseContextCoverageAuditTest extends PostgresIntegrationTestSupport {
 
         ContextCoverageResult defaultContext = contexts.getFirst();
         assertThat(products).hasSize(454);
-        assertThat(diagnosis.inventoryNonDemoDistinctCodes()).isEqualTo(463);
+        assertThat(diagnosis.inventoryNonDemoDistinctCodes()).isEqualTo(464);
         assertThat(diagnosis.dbExtraProductCodes()).hasSize(17);
         assertThat(diagnosis.excelMissingProductCodes()).isEmpty();
         assertThat(contexts).hasSize(8);

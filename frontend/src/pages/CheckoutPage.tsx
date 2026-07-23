@@ -616,6 +616,7 @@ export default function CheckoutPage() {
   const [loadedModeRequest, setLoadedModeRequest] = useState<string>();
   const [selectedCandidateId, setSelectedCandidateId] = useState<string>();
   const [latestConfirmationId, setLatestConfirmationId] = useState<string>();
+  const [autoCalculateRequest, setAutoCalculateRequest] = useState(0);
   const [api, contextHolder] = message.useMessage();
   const barcodeInputRef = useRef<InputRef>(null);
   const selectedPlanRef = useRef<HTMLDivElement>(null);
@@ -822,6 +823,12 @@ export default function CheckoutPage() {
     }
   }, [recommended?.candidateId, result]);
 
+  useEffect(() => {
+    if (autoCalculateRequest > 0) {
+      void calculate();
+    }
+  }, [autoCalculateRequest]);
+
   const cartColumns: ColumnsType<CartItem> = [
     {
       title: "商品",
@@ -985,7 +992,8 @@ export default function CheckoutPage() {
         }
         return next;
       });
-      api.success(`已加入组合包：${offer.productName}`);
+      setAutoCalculateRequest((request) => request + 1);
+      api.success(`已加入组合包：${offer.productName}，正在计算最优促销`);
       return;
     }
     setCartItems((items) => {
@@ -1011,7 +1019,8 @@ export default function CheckoutPage() {
         }
       ];
     });
-    api.success(`已加入换购商品：${offer.productName} x ${offer.exchangeQuantity}`);
+    setAutoCalculateRequest((request) => request + 1);
+    api.success(`已加入换购商品：${offer.productName} x ${offer.exchangeQuantity}，正在计算最优促销`);
   }
 
   function addItem(values: ProductForm) {
