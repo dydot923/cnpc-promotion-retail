@@ -596,7 +596,7 @@ const memberLevelOptions = [
 
 export default function CheckoutPage() {
   const { businessDate: globalBusinessDate } = useOutletContext<AppOutletContext>();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const requestedDemoKey = searchParams.get("demo") || undefined;
   const requestedProductCode = searchParams.get("product") || undefined;
   const requestedProductQuantity = Math.max(Number(searchParams.get("quantity") || 1), 1);
@@ -876,6 +876,18 @@ export default function CheckoutPage() {
     setLatestConfirmationId(undefined);
   }
 
+  function clearCheckoutRequestParams() {
+    const nextParams = new URLSearchParams(searchParams);
+    ["demo", "product", "quantity", "mode", "fuelType", "fuelGrade", "fuelAmount"].forEach((key) => {
+      nextParams.delete(key);
+    });
+    if (nextParams.toString() !== searchParams.toString()) {
+      setSearchParams(nextParams, { replace: true });
+    }
+    setLoadedProductRequest(undefined);
+    setLoadedModeRequest(undefined);
+  }
+
   function loadDemo(demo: DemoCase) {
     setLoadedDemoKey(demo.key);
     setCartItems(demo.cartItems);
@@ -903,6 +915,11 @@ export default function CheckoutPage() {
     }
     resetCalculation();
     barcodeInputRef.current?.focus();
+  }
+
+  function selectMode(nextMode: CheckoutMode) {
+    clearCheckoutRequestParams();
+    applyMode(nextMode);
   }
 
   function queryProduct() {
@@ -1139,11 +1156,16 @@ export default function CheckoutPage() {
   }
 
   function startNewCheckout() {
+    clearCheckoutRequestParams();
     setCartItems([]);
+    setBarcode("");
     setMode("shop");
     fuelForm.setFieldsValue(fuel());
     customerForm.setFieldsValue({ member: true, memberLevel: "gold", memberCode: "demo-member-002" });
     contextForm.setFieldsValue(defaultContext(globalBusinessDate));
+    productForm.resetFields();
+    productForm.setFieldValue("quantity", 1);
+    productLookupMutation.reset();
     resetCalculation();
     setLoadedDemoKey(undefined);
     barcodeInputRef.current?.focus();
@@ -1258,16 +1280,16 @@ export default function CheckoutPage() {
             ) : null}
 
             <div className="mode-actions">
-              <Button icon={<ShopOutlined />} className={mode === "shop" ? "mode-button active" : "mode-button"} onClick={() => applyMode("shop")}>
+              <Button icon={<ShopOutlined />} className={mode === "shop" ? "mode-button active" : "mode-button"} onClick={() => selectMode("shop")}>
                 便利店商品
               </Button>
-              <Button icon={<CarOutlined />} className={mode === "fuel" ? "mode-button active" : "mode-button"} onClick={() => applyMode("fuel")}>
+              <Button icon={<CarOutlined />} className={mode === "fuel" ? "mode-button active" : "mode-button"} onClick={() => selectMode("fuel")}>
                 加油站
               </Button>
-              <Button icon={<SwapOutlined />} className={mode === "exchange" ? "mode-button active" : "mode-button"} onClick={() => applyMode("exchange")}>
+              <Button icon={<SwapOutlined />} className={mode === "exchange" ? "mode-button active" : "mode-button"} onClick={() => selectMode("exchange")}>
                 加油换购
               </Button>
-              <Button icon={<TagsOutlined />} className={mode === "coupon" ? "mode-button active" : "mode-button"} onClick={() => applyMode("coupon")}>
+              <Button icon={<TagsOutlined />} className={mode === "coupon" ? "mode-button active" : "mode-button"} onClick={() => selectMode("coupon")}>
                 用券结算
               </Button>
             </div>
@@ -1301,11 +1323,11 @@ export default function CheckoutPage() {
                 </Form>
                 <Space wrap>
                   {mode === "fuel" ? (
-                    <Button type="primary" icon={<SwapOutlined />} onClick={() => applyMode("exchange")}>
+                    <Button type="primary" icon={<SwapOutlined />} onClick={() => selectMode("exchange")}>
                       查看可换购商品
                     </Button>
                   ) : (
-                    <Button icon={<CarOutlined />} onClick={() => applyMode("fuel")}>
+                    <Button icon={<CarOutlined />} onClick={() => selectMode("fuel")}>
                       返回加油站
                     </Button>
                   )}

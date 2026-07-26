@@ -79,6 +79,13 @@ async function main() {
   assert(files.checkout.includes("fetchProductByBarcode"), "CheckoutPage barcode lookup missing");
   assert(files.checkout.includes('type CheckoutMode = "shop" | "fuel" | "exchange" | "coupon"'), "four checkout modes missing");
   assert(files.checkout.includes("加油站") && files.checkout.includes('mode === "exchange"'), "fuel/exchange mode switch missing");
+  assert(
+    files.checkout.includes("const [searchParams, setSearchParams] = useSearchParams()") &&
+      files.checkout.includes("function clearCheckoutRequestParams()") &&
+      files.checkout.includes("function selectMode(nextMode: CheckoutMode)") &&
+      /function startNewCheckout\(\)[\s\S]*?clearCheckoutRequestParams\(\);[\s\S]*?setCartItems\(\[\]\);/.test(files.checkout),
+    "URL-loaded checkout scenarios must be cleared by manual mode changes and new orders"
+  );
   assert(!files.checkout.includes("products.slice(0, 8)"), "product search results must not be truncated");
   assert(files.checkout.includes("搜索活动名称、规则编号或未满足条件"), "blocked promotion search missing");
 
