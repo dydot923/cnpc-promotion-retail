@@ -16,7 +16,7 @@ $backendDirectory = Join-Path $projectRoot "backend"
 $releaseDirectory = Join-Path $projectRoot "release"
 $stagingDirectory = Join-Path $releaseDirectory "staging"
 $appName = "CNPC Smart Retail"
-$appVersion = "1.0.1"
+$appVersion = "1.1.0"
 $wixDownloadUrl = "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip"
 $wixArchiveSha256 = "6AC824E1642D6F7277D0ED7EA09411A508F6116BA6FAE0AA5F2C7DAA2FF43D31"
 
