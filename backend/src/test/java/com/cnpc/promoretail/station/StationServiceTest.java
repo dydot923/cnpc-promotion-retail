@@ -12,6 +12,17 @@ import org.junit.jupiter.api.Test;
 class StationServiceTest {
 
     @Test
+    void offlineRepositoryContainsCheckoutDefaultStation() {
+        DefaultStationService service = new DefaultStationService(new InMemoryStationRepository());
+
+        StationResponse response = service.station(InMemoryStationRepository.DEFAULT_STATION_CODE);
+
+        assertThat(response.stationName()).isEqualTo("\u5b9d\u5c71\u8def\u52a0\u6cb9\u7ad9");
+        assertThat(response.city()).isEqualTo("\u4e4c\u9c81\u6728\u9f50");
+        assertThat(response.stationType()).isEqualTo("gas_station");
+    }
+
+    @Test
     void findByStationCodeReturnsStationDetail() {
         DefaultStationService service = service();
 
