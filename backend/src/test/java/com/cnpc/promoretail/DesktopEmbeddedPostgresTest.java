@@ -35,6 +35,21 @@ class DesktopEmbeddedPostgresTest {
         System.clearProperty("spring.datasource.username");
         System.clearProperty("spring.datasource.password");
         System.clearProperty("spring.flyway.enabled");
+        System.clearProperty("jpackage.app-path");
+    }
+
+    @Test
+    void locatesPostgresArchiveBesidePackagedApplication() throws Exception {
+        Path launcher = temporaryDirectory.resolve("installed/CNPC Smart Retail.exe");
+        Path archive = launcher.getParent().resolve("app/postgres-windows-x86_64.txz");
+        Files.createDirectories(archive.getParent());
+        Files.writeString(launcher, "launcher");
+        Files.writeString(archive, "postgres archive");
+        System.setProperty("jpackage.app-path", launcher.toString());
+
+        var method = DesktopEmbeddedPostgres.class.getDeclaredMethod("packagedPostgresArchive");
+        method.setAccessible(true);
+        assertThat(method.invoke(null)).isEqualTo(archive);
     }
 
     @Test

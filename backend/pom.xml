@@ -79,7 +79,17 @@
                     <groupId>io.zonky.test.postgres</groupId>
                     <artifactId>embedded-postgres-binaries-linux-amd64-alpine</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>io.zonky.test.postgres</groupId>
+                    <artifactId>embedded-postgres-binaries-windows-amd64</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.zonky.test.postgres</groupId>
+            <artifactId>embedded-postgres-binaries-windows-amd64</artifactId>
+            <version>${embedded-postgres-binaries.version}</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>
